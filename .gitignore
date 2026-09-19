@@ -1,0 +1,5 @@
+.vercel
+.env
+.env.*
+backups/
+mcp/node_modules/

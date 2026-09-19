@@ -1,0 +1,1294 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Alfred</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg: #0c0c13;
+            --surf: #14141e;
+            --surf2: #1a1a27;
+            --bdr: #222236;
+            --accent: #7c6af7;
+            --aglo: rgba(124, 106, 247, 0.14);
+            --txt: #e0e0ee;
+            --dim: #6e6e90;
+            --red: #f43f5e;
+            --warn: #f59e0b;
+        }
+
+        body {
+            font-family: system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--txt);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+        }
+
+        #app {
+            width: 100%;
+            max-width: 500px;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        button {
+            font-family: inherit;
+            cursor: pointer;
+            border: none;
+            transition: all 0.15s;
+        }
+
+        input {
+            font-family: inherit;
+        }
+
+        .pill {
+            padding: 7px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            border: none;
+            background: var(--surf2);
+            color: var(--txt);
+            outline: 1px solid var(--bdr);
+            transition: all 0.15s;
+        }
+
+        .pill.active {
+            background: var(--aglo);
+            color: var(--accent);
+            outline: 1px solid var(--accent);
+        }
+
+        .inp {
+            width: 100%;
+            background: var(--surf2);
+            border: 1px solid var(--bdr);
+            border-radius: 10px;
+            padding: 12px 14px;
+            color: var(--txt);
+            font-size: 15px;
+            outline: none;
+        }
+
+        .inp:focus {
+            border-color: var(--accent);
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .flt-label {
+            font-size: 10px;
+            color: var(--dim);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 5px;
+        }
+
+        /* Multi-select filter dropdown */
+        .ms {
+            position: relative;
+        }
+
+        .ms-btn {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+            cursor: pointer;
+            text-align: left;
+            font-size: 13px;
+            padding: 9px 10px;
+        }
+
+        .ms-btn .ms-text {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .ms-btn .ms-caret {
+            color: var(--dim);
+            font-size: 10px;
+            flex-shrink: 0;
+            transition: transform 0.15s;
+        }
+
+        .ms.open .ms-btn {
+            border-color: var(--accent);
+        }
+
+        .ms.open .ms-caret {
+            transform: rotate(180deg);
+        }
+
+        .ms-panel {
+            display: none;
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            right: 0;
+            z-index: 50;
+            background: var(--surf);
+            border: 1px solid var(--bdr);
+            border-radius: 10px;
+            padding: 5px;
+            max-height: 210px;
+            overflow-y: auto;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+        }
+
+        .ms.open .ms-panel {
+            display: block;
+        }
+
+        .ms-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 9px;
+            border-radius: 7px;
+            cursor: pointer;
+            font-size: 13px;
+            color: var(--txt);
+        }
+
+        .ms-row:hover {
+            background: var(--surf2);
+        }
+
+        .ms-check {
+            width: 15px;
+            height: 15px;
+            border-radius: 4px;
+            border: 1px solid var(--bdr);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            line-height: 1;
+            color: #fff;
+            flex-shrink: 0;
+        }
+
+        .ms-row.sel .ms-check {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+
+        <!-- Header -->
+        <div style="padding:18px 20px 0;display:flex;justify-content:space-between;align-items:center">
+            <div>
+                <div style="font-size:18px;font-weight:800;letter-spacing:-0.4px">Alfred</div>
+                <div id="memo-count" style="font-size:12px;color:var(--dim);margin-top:1px">0 memos saved</div>
+            </div>
+            <div style="display:flex;gap:6px">
+                <button onclick="importMemos()" title="Restore memos from an Alfred JSON file"
+                    style="padding:8px 12px;border-radius:8px;background:var(--surf2);color:var(--txt);font-size:13px;font-weight:600;outline:1px solid var(--bdr)">⬆
+                    Import</button>
+                <button onclick="exportMemos()" title="Download all memos as a JSON file"
+                    style="padding:8px 12px;border-radius:8px;background:var(--surf2);color:var(--txt);font-size:13px;font-weight:600;outline:1px solid var(--bdr)">⬇
+                    Export</button>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div style="display:flex;margin:14px 20px 0;background:var(--surf);border-radius:10px;padding:4px;gap:3px">
+            <button id="tab-record" onclick="switchTab('record')"
+                style="flex:1;padding:8px 0;border-radius:7px;font-size:14px;font-weight:600;background:var(--accent);color:#fff">🎙
+                Record</button>
+            <button id="tab-browse" onclick="switchTab('browse')"
+                style="flex:1;padding:8px 0;border-radius:7px;font-size:14px;font-weight:400;background:transparent;color:var(--dim)">📋
+                Browse</button>
+        </div>
+
+        <!-- Content -->
+        <div style="flex:1;padding:22px 20px 80px;overflow-y:auto" id="content">
+
+            <!-- RECORD VIEW -->
+            <div id="view-record">
+                <div id="rec-idle" style="display:flex;flex-direction:column;align-items:center;padding-top:12px">
+                    <!-- Ring + Button -->
+                    <div style="position:relative;width:148px;height:148px;margin-bottom:6px">
+                        <svg id="ring-svg" width="148" height="148"
+                            style="position:absolute;top:0;left:0;transform:rotate(-90deg)">
+                            <circle cx="74" cy="74" r="54" fill="none" stroke="var(--surf2)" stroke-width="7" />
+                            <circle id="ring-progress" cx="74" cy="74" r="54" fill="none" stroke="var(--red)"
+                                stroke-width="7" stroke-dasharray="339.3" stroke-dashoffset="339.3"
+                                stroke-linecap="round" style="transition:stroke-dashoffset 1s linear;display:none" />
+                        </svg>
+                        <button id="rec-btn" onclick="toggleRec()" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+            width:94px;height:94px;border-radius:50%;background:var(--accent);font-size:34px;
+            box-shadow:0 0 36px rgba(124,106,247,0.25)">🎙</button>
+                    </div>
+                    <div id="timer-display"
+                        style="font-size:30px;font-weight:800;color:var(--red);font-variant-numeric:tabular-nums;margin-bottom:4px;display:none">
+                        30s</div>
+                    <div id="rec-label" style="color:var(--dim);font-size:14px;text-align:center;margin-bottom:6px">Tap
+                        to start recording</div>
+                    <div id="rec-sub" style="font-size:12px;color:var(--dim);margin-bottom:8px;display:none">Speak your
+                        thought. Up to 30 seconds.</div>
+                    <div id="rec-error"
+                        style="display:none;margin-top:12px;background:rgba(244,63,94,0.08);border:1px solid rgba(244,63,94,0.3);border-radius:10px;padding:11px 14px;font-size:13px;color:var(--red);line-height:1.6;width:100%">
+                    </div>
+                    <div id="live-box"
+                        style="display:none;margin-top:16px;background:var(--surf);border:1px solid var(--bdr);border-radius:12px;padding:14px;width:100%;max-height:160px;overflow-y:auto;font-size:14px;line-height:1.75;color:var(--txt)">
+                        <div
+                            style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px">
+                            Live transcript</div>
+                        <div id="live-text"></div>
+                    </div>
+                    <div id="how-it-works"
+                        style="margin-top:28px;background:var(--surf);border-radius:12px;padding:16px;width:100%;border:1px solid var(--bdr)">
+                        <div
+                            style="font-size:12px;font-weight:600;color:var(--dim);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px">
+                            How it works</div>
+                        <div style="font-size:13px;color:var(--dim);line-height:2">
+                            🎙 &nbsp;Tap record and speak your idea (up to 30s)<br>
+                            ✍️ &nbsp;App transcribes your voice in real time<br>
+                            🗂 &nbsp;Name and categorize by voice or by typing<br>
+                            📋 &nbsp;Browse all memos on the Browse tab
+                        </div>
+                    </div>
+                </div>
+
+                <!-- WIZARD -->
+                <div id="wizard" class="hidden">
+                    <div id="wiz-progress" style="display:flex;gap:5px;margin-bottom:22px">
+                        <div class="prog-bar" style="height:3px;flex:1;border-radius:2px;background:var(--accent)">
+                        </div>
+                        <div class="prog-bar" style="height:3px;flex:1;border-radius:2px;background:var(--bdr)"></div>
+                    </div>
+
+                    <!-- Step: Name -->
+                    <div id="step-name">
+                        <div
+                            style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;margin-bottom:6px">
+                            Step 1 of 2</div>
+                        <div style="font-size:21px;font-weight:700;margin-bottom:20px">Name this memo</div>
+                        <input id="draft-name" class="inp" placeholder="e.g. App idea for onboarding flow..." />
+                        <div style="display:flex;gap:10px;margin-top:16px">
+                            <button onclick="wizVoice('name')" id="voice-btn-name" class="voice-btn"
+                                style="padding:12px 16px;border-radius:10px;border:1px solid var(--bdr);background:var(--surf2);color:var(--dim);font-size:14px;min-width:130px">🎤
+                                Voice input</button>
+                            <button onclick="nextStep('name')"
+                                style="flex:1;padding:12px 0;border-radius:10px;background:var(--accent);color:#fff;font-weight:700;font-size:15px">Next
+                                →</button>
+                        </div>
+                        <div id="transcript-preview-name" class="hidden"
+                            style="margin-top:22px;background:var(--surf);border:1px solid var(--bdr);border-radius:10px;padding:13px">
+                            <div
+                                style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;margin-bottom:6px">
+                                Your memo</div>
+                            <div id="tp-name-text"
+                                style="font-size:13px;color:var(--dim);line-height:1.75;max-height:80px;overflow-y:auto">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step: Confirm -->
+                    <div id="step-confirm" class="hidden">
+                        <div
+                            style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;margin-bottom:6px">
+                            Step 2 of 2</div>
+                        <div style="font-size:21px;font-weight:700;margin-bottom:20px">Confirm & save</div>
+                        <div
+                            style="background:var(--surf);border:1px solid var(--bdr);border-radius:14px;padding:18px;margin-bottom:18px">
+                            <div id="confirm-name" style="font-size:18px;font-weight:700;margin-bottom:10px"></div>
+                            <div id="confirm-tags" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px"></div>
+                            <div id="confirm-content"
+                                style="font-size:14px;color:var(--dim);line-height:1.75;border-top:1px solid var(--bdr);padding-top:13px">
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:8px">
+                            <button onclick="discardMemo()"
+                                style="padding:12px 14px;border-radius:10px;border:1px solid var(--bdr);background:var(--surf2);color:var(--dim);font-size:14px">Discard</button>
+                            <button onclick="showStep('name')"
+                                style="padding:12px 14px;border-radius:10px;border:1px solid var(--bdr);background:var(--surf2);color:var(--txt);font-size:14px">←
+                                Edit</button>
+                            <button onclick="saveMemo()"
+                                style="flex:1;padding:12px 0;border-radius:10px;background:var(--accent);color:#fff;font-weight:700;font-size:15px">Save
+                                memo ✓</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BROWSE VIEW -->
+            <div id="view-browse" class="hidden">
+                <input id="search-input" class="inp" placeholder="Search memos…" oninput="renderBrowse()"
+                    style="margin-bottom:14px" />
+
+                <!-- Navigate by (dimension) -->
+                <div
+                    style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;margin-bottom:6px">
+                    Navigate by</div>
+                <div id="dim-selector" style="display:flex;gap:7px;overflow-x:auto;padding-bottom:6px;margin-bottom:14px">
+                </div>
+
+                <!-- Sort -->
+                <div style="display:flex;align-items:center;gap:9px;margin-bottom:14px">
+                    <span
+                        style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;flex-shrink:0">Sort</span>
+                    <select id="sort-select" class="inp" onchange="onSortChange()"
+                        style="appearance:auto;font-size:13px;padding:9px 10px">
+                        <option value="date-desc">Newest first</option>
+                        <option value="date-asc">Oldest first</option>
+                        <option value="priority">Priority (High → Low)</option>
+                        <option value="difficulty">Difficulty (High → Low)</option>
+                        <option value="blocker">Blocker (Yes → No)</option>
+                    </select>
+                </div>
+
+                <!-- Combined property filters -->
+                <div
+                    style="background:var(--surf);border:1px solid var(--bdr);border-radius:12px;padding:14px;margin-bottom:18px">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+                        <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px">Filters
+                        </div>
+                        <button onclick="clearFilters()" id="clear-filters-btn"
+                            style="background:none;color:var(--accent);font-size:12px;font-weight:600;padding:2px 6px;border-radius:6px;display:none">Clear
+                            all</button>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                        <div>
+                            <div class="flt-label">Priority</div>
+                            <div class="ms" id="ms-priority">
+                                <div class="ms-btn inp" data-ms="priority"><span class="ms-text">All</span><span
+                                        class="ms-caret">▾</span></div>
+                                <div class="ms-panel" id="ms-panel-priority"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flt-label">Difficulty</div>
+                            <div class="ms" id="ms-difficulty">
+                                <div class="ms-btn inp" data-ms="difficulty"><span class="ms-text">All</span><span
+                                        class="ms-caret">▾</span></div>
+                                <div class="ms-panel" id="ms-panel-difficulty"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flt-label">Blocker</div>
+                            <div class="ms" id="ms-blocker">
+                                <div class="ms-btn inp" data-ms="blocker"><span class="ms-text">All</span><span
+                                        class="ms-caret">▾</span></div>
+                                <div class="ms-panel" id="ms-panel-blocker"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flt-label">Status</div>
+                            <div class="ms" id="ms-status">
+                                <div class="ms-btn inp" data-ms="status"><span class="ms-text">All</span><span
+                                        class="ms-caret">▾</span></div>
+                                <div class="ms-panel" id="ms-panel-status"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flt-label">Project</div>
+                            <div class="ms" id="ms-project">
+                                <div class="ms-btn inp" data-ms="project"><span class="ms-text">All</span><span
+                                        class="ms-caret">▾</span></div>
+                                <div class="ms-panel" id="ms-panel-project"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flt-label">Sub-Project</div>
+                            <div class="ms" id="ms-subProject">
+                                <div class="ms-btn inp" data-ms="subProject"><span class="ms-text">All</span><span
+                                        class="ms-caret">▾</span></div>
+                                <div class="ms-panel" id="ms-panel-subProject"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flt-label">Frequency</div>
+                            <div class="ms" id="ms-recurringFrequency">
+                                <div class="ms-btn inp" data-ms="recurringFrequency"><span class="ms-text">All</span><span
+                                        class="ms-caret">▾</span></div>
+                                <div class="ms-panel" id="ms-panel-recurringFrequency"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="filter-summary"
+                        style="font-size:12px;color:var(--dim);margin-top:11px;line-height:1.6;display:none"></div>
+                </div>
+                <div id="browse-content"></div>
+            </div>
+
+        </div>
+
+        <!-- EDIT MEMO MODAL -->
+        <div id="edit-modal"
+            style="position:fixed;inset:0;background:rgba(0,0,0,0.65);display:none;justify-content:center;align-items:center;z-index:100;padding:16px">
+            <div
+                style="background:var(--surf);border:1px solid var(--bdr);border-radius:14px;width:100%;max-width:460px;max-height:90vh;overflow-y:auto;padding:22px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+                    <div style="font-size:18px;font-weight:700">Edit memo</div>
+                    <button onclick="closeEdit()"
+                        style="background:none;color:var(--dim);font-size:18px;padding:2px 6px;border-radius:6px">✕</button>
+                </div>
+
+                <div
+                    style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;margin-bottom:6px">
+                    Name</div>
+                <input id="edit-name" class="inp" style="margin-bottom:16px" />
+
+                <div style="display:flex;gap:10px;margin-bottom:16px">
+                    <div style="flex:1">
+                        <div
+                            style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;margin-bottom:6px">
+                            Priority</div>
+                        <select id="edit-priority" class="inp" style="appearance:auto;font-size:13px;padding:10px">
+                            <option value="">—</option>
+                            <option value="High">High</option>
+                            <option value="Medium">Medium</option>
+                            <option value="Low">Low</option>
+                        </select>
+                    </div>
+                    <div style="flex:1">
+                        <div
+                            style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;margin-bottom:6px">
+                            Difficulty</div>
+                        <select id="edit-difficulty" class="inp" style="appearance:auto;font-size:13px;padding:10px">
+                            <option value="">—</option>
+                            <option value="Hard">Hard</option>
+                            <option value="Medium">Medium</option>
+                            <option value="Easy">Easy</option>
+                        </select>
+                    </div>
+                    <div style="flex:1">
+                        <div
+                            style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;margin-bottom:6px">
+                            Blocker</div>
+                        <select id="edit-blocker" class="inp" onchange="onBlockerChange()"
+                            style="appearance:auto;font-size:13px;padding:10px">
+                            <option value="">—</option>
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="edit-blocker-reason-wrap" style="margin-bottom:16px;display:none">
+                    <div
+                        style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;margin-bottom:6px">
+                        What's the blocker?</div>
+                    <input id="edit-blocker-reason" class="inp" placeholder="Describe what's blocking this…"
+                        style="font-size:13px" />
+                </div>
+
+                <div style="display:flex;gap:10px;margin-bottom:16px">
+                    <div style="flex:1">
+                        <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;margin-bottom:6px">Status</div>
+                        <select id="edit-status" class="inp" style="appearance:auto;font-size:13px;padding:10px">
+                            <option value="">—</option>
+                            <option value="To Do">To Do</option>
+                            <option value="Doing">Doing</option>
+                            <option value="Scheduled">Scheduled</option>
+                            <option value="On Hold">On Hold</option>
+                            <option value="Done">Done</option>
+                        </select>
+                    </div>
+                    <div style="flex:1">
+                        <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;margin-bottom:6px">Recurring Frequency</div>
+                        <select id="edit-recur" class="inp" style="appearance:auto;font-size:13px;padding:10px">
+                            <option value="">—</option>
+                            <option value="Daily">Daily</option>
+                            <option value="Recurring">Recurring</option>
+                            <option value="One-time">One-time</option>
+                            <option value="Sporadic">Sporadic</option>
+                            <option value="Iterative">Iterative</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="margin-bottom:16px">
+                    <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;margin-bottom:6px">Project</div>
+                    <select id="edit-project" class="inp" style="appearance:auto;font-size:13px;padding:10px;width:100%">
+                        <option value="">—</option>
+                    </select>
+                </div>
+
+                <div style="margin-bottom:16px">
+                    <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;margin-bottom:6px">Sub-Project</div>
+                    <select id="edit-sub-project" class="inp" style="appearance:auto;font-size:13px;padding:10px;width:100%">
+                        <option value="">—</option>
+                    </select>
+                </div>
+
+                <div
+                    style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;margin-bottom:6px">
+                    Content</div>
+                <textarea id="edit-content" class="inp" rows="6"
+                    style="margin-bottom:20px;resize:vertical;line-height:1.7;font-size:14px"></textarea>
+
+                <div style="display:flex;gap:10px">
+                    <button onclick="closeEdit()"
+                        style="flex:1;padding:12px 0;border-radius:10px;border:1px solid var(--bdr);background:var(--surf2);color:var(--dim);font-size:14px">Cancel</button>
+                    <button onclick="saveEdit()"
+                        style="flex:1;padding:12px 0;border-radius:10px;background:var(--accent);color:#fff;font-weight:700;font-size:15px">Save
+                        ✓</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ─────────────────────────────────────────────────────────────
+        //  SUPABASE CLOUD SYNC  (optional — app runs local-only until set)
+        //  Paste your project's values below. The anon key is safe to be
+        //  public: Row-Level Security keeps each user to their own data.
+        // ─────────────────────────────────────────────────────────────
+        const SUPABASE_URL = 'https://aoiaajghndbvjkkkqbnm.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_WbYoILo-3Qocw1XuhK38Hw_fqnj7TpW';
+
+        const cloudEnabled = SUPABASE_URL.startsWith('http') && !SUPABASE_ANON_KEY.startsWith('REPLACE');
+        const sb = cloudEnabled ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+            auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+        }) : null;
+        const SETTINGS_ID = 'global';   // single shared settings row (no per-user auth)
+        let syncTimer = null;
+
+        const PROJECTS = ['2025 American Trips','Artemis Design Labs','Ascend NYC','Financial','General','Greencard Application','Health Insurance','Items to Sell','MVP Creator','Social Life','Startup Ventures','UX Career'];
+        const SUB_PROJECTS = ['ADL Business & Operations','ADL Design','ADL Engineering','ADL Growth Hacking','ADL Research','ADL Service Module','AI Code Provenance Logger','AI Education','AI Solutions for SMBs (Newsletter)','AI Use Case Validator','Abode','Accessibility Compliance Sub-Agent','Agents / Automations for SMBs','Anti-Pattern Auto-Flagger','Ascend NYC','Auto-Layout to Tailwind Translator','Bakufu','Behavioral Analytics','Chart Standardization Agent','Component Adoption Funnel','Component Creation Plugin','Component Health Score','Component Library Onboarding Agent','Component Provenance Tracker','DS Migration Co-Pilot','Dashboard Layout Architect Agent','Data Table Component Forge','Design System Health Bot','Design System ROI Dashboard','Empty/Loading/Error State Auditor','Figma Spec Generator Agent','Figma↔React Drift Monitor','Financial','Frontend Decision Log Agent','Frontend Velocity Telemetry','Hardcoded Value Hunter','Job Applications','Layer Renaming Figma Plugin','Living Component Docs','Luxury Chique','Mobility','Modular Market','Optimize Inc Website','Orphan Component Reaper','PR Design Token Linter','Personal Brand','Portfolio Updates','Product Feedback Platform','Prompt Repo','Refunds','Seamline (Email Optimizer)','Start','Startup Ventures','Storybook-to-Production Sync Agent','Sub-Project Tasks','Target User Persona Creation','Tasks Breakdown by Individual Sub-Tasks','Token Management Figma Plugin','Token Sync Pipeline','Transcribe Musashi videos + build NotebookLM audio logs','Tribal Knowledge Extractor','Variant Coverage Auditor','Vibe-Code Refactor Agent','Visual Regression Sentinel','Weekend Tasks','eCommerce','i18n / RTL Readiness Agent'];
+        const STATUS_OPTIONS = ['To Do','Doing','Scheduled','On Hold','Done'];
+        const STATUS_ORDER = {'To Do':0,'Doing':1,'Scheduled':2,'On Hold':3,'Done':4,'Unset':5};
+        const RECUR_OPTIONS = ['Daily','Recurring','One-time','Sporadic','Iterative'];
+
+        function noteToRow(n) {
+            return {
+                id: n.id, name: n.name, content: n.content, priority: n.priority,
+                difficulty: n.difficulty, blocker: n.blocker, blocker_reason: n.blockerReason || '',
+                project: n.project || '', sub_project: n.subProject || '',
+                status: n.status || '', recurring_frequency: n.recurringFrequency || '',
+                created_at: n.timestamp
+            };
+        }
+        function rowToNote(r) {
+            return {
+                id: r.id, name: r.name, content: r.content, priority: r.priority,
+                difficulty: r.difficulty, blocker: r.blocker, blockerReason: r.blocker_reason || '',
+                project: r.project || '', subProject: r.sub_project || '',
+                status: r.status || '', recurringFrequency: r.recurring_frequency || '',
+                timestamp: r.created_at
+            };
+        }
+
+        async function loadFromCloud() {
+            if (!sb) return;
+            const { data: rows, error } = await sb.from('alfred_notes').select('*').order('created_at', { ascending: false });
+            if (error) return; // keep localStorage data on fetch failure
+            const cloudNotes = rows ? rows.map(rowToNote) : [];
+            if (cloudNotes.length === 0 && notes.length > 0) {
+                // Cloud empty but memos already in this browser → seed the cloud from local.
+                await syncToCloud();
+            } else {
+                // Merge: keep any local-only notes not yet synced, then push them to cloud.
+                const cloudIds = new Set(cloudNotes.map(n => n.id));
+                const localOnly = notes.filter(n => !cloudIds.has(n.id));
+                notes = [...localOnly, ...cloudNotes].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                if (localOnly.length) syncToCloud();
+            }
+            localStorage.setItem('alfred-notes', JSON.stringify(notes));
+            updateCount(); renderBrowse();
+        }
+
+        function scheduleSync() {
+            if (!sb) return;
+            clearTimeout(syncTimer);
+            syncTimer = setTimeout(syncToCloud, 800);
+        }
+        async function syncToCloud() {
+            if (!sb) return;
+            try {
+                const rows = notes.map(noteToRow);
+                if (rows.length) await sb.from('alfred_notes').upsert(rows, { onConflict: 'id' });
+                let del = sb.from('alfred_notes').delete();
+                del = notes.length
+                    ? del.not('id', 'in', '(' + notes.map(n => '"' + n.id + '"').join(',') + ')')
+                    : del.neq('id', '');   // no memos left → clear the table
+                await del;
+            } catch (e) { console.error('Cloud sync failed:', e); }
+        }
+
+        function initSelects() {
+            const pSel = document.getElementById('edit-project');
+            PROJECTS.forEach(p => { const o = document.createElement('option'); o.value = o.textContent = p; pSel.appendChild(o); });
+            const spSel = document.getElementById('edit-sub-project');
+            SUB_PROJECTS.forEach(s => { const o = document.createElement('option'); o.value = o.textContent = s; spSel.appendChild(o); });
+        }
+
+        async function initApp() {
+            initSelects();
+            updateCount(); renderBrowse();   // paint from localStorage cache first
+            if (cloudEnabled) await loadFromCloud();
+        }
+
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const CIRC = 2 * Math.PI * 54;
+
+        let notes = JSON.parse(localStorage.getItem('alfred-notes') || '[]');
+
+        let draft = { name: '', content: '', project: '', subProject: '', status: '', recurringFrequency: '' };
+        let recState = 'idle';
+        let timeLeft = 30;
+        let rRec = null, wRec = null;
+        let rTimer = null, wTimer = null;
+        let isRecRef = false;
+        let finalText = '';
+        let currentStep = null;
+
+        // ── BROWSE NAVIGATION STATE ──
+        const DIMS = [
+            { key: 'project', label: 'Project' },
+            { key: 'subProject', label: 'Sub-Project' },
+            { key: 'status', label: 'Status' },
+            { key: 'priority', label: 'Priority' },
+            { key: 'difficulty', label: 'Difficulty' },
+            { key: 'blocker', label: 'Blocker' },
+            { key: 'recurringFrequency', label: 'Frequency' },
+        ];
+        const LEVEL_ORDER = { High: 0, Medium: 1, Low: 2, Hard: 0, Easy: 2 };
+        const BLOCKER_ORDER = { Yes: 0, No: 1 };
+
+        let browseDim = 'project';   // which property the navbar groups by
+        let browseSort = 'date-desc'; // how memos are ordered within each group
+
+        // Combined property filters. Each dim holds an array of accepted values;
+        // an empty array means "all". A memo must match ALL active (non-empty) dims.
+        let filters = { project: [], subProject: [], status: [], priority: [], difficulty: [], blocker: [], recurringFrequency: [] };
+        // Current option list shown per dropdown, so rows can reference values by index.
+        let msOptions = { project: [], subProject: [], status: [], priority: [], difficulty: [], blocker: [], recurringFrequency: [] };
+
+        function dimLabel(dim) { return (DIMS.find(d => d.key === dim) || {}).label || dim; }
+
+        // The grouping/filter value of a memo for a given dimension.
+        function dimValue(n, dim) {
+            if (dim === 'project') return n.project || 'Unset';
+            if (dim === 'subProject') return n.subProject || 'Unset';
+            if (dim === 'status') return n.status || 'Unset';
+            if (dim === 'priority') return n.priority || 'Unset';
+            if (dim === 'difficulty') return n.difficulty || 'Unset';
+            if (dim === 'blocker') return n.blocker || 'Unset';
+            if (dim === 'recurringFrequency') return n.recurringFrequency || 'Unset';
+            return '';
+        }
+
+        // Only values that actually appear in saved memos, in a sensible order.
+        function dimValuesPresent(dim) {
+            const set = new Set(notes.map(n => dimValue(n, dim)));
+            if (dim === 'priority') return ['High', 'Medium', 'Low', 'Unset'].filter(v => set.has(v));
+            if (dim === 'difficulty') return ['Hard', 'Medium', 'Easy', 'High', 'Low', 'Unset'].filter(v => set.has(v));
+            if (dim === 'blocker') return ['Yes', 'No', 'Unset'].filter(v => set.has(v));
+            if (dim === 'status') return STATUS_OPTIONS.concat(['Unset']).filter(v => set.has(v));
+            if (dim === 'recurringFrequency') return RECUR_OPTIONS.concat(['Unset']).filter(v => set.has(v));
+            return [...set].sort();
+        }
+
+        function lvlRank(v) { return v in LEVEL_ORDER ? LEVEL_ORDER[v] : 99; }
+        function blkRank(v) { return v in BLOCKER_ORDER ? BLOCKER_ORDER[v] : 99; }
+
+        function sortNotes(arr) {
+            const a = [...arr];
+            const byNew = (x, y) => (y.timestamp || '').localeCompare(x.timestamp || '');
+            if (browseSort === 'date-asc') a.sort((x, y) => (x.timestamp || '').localeCompare(y.timestamp || ''));
+            else if (browseSort === 'priority') a.sort((x, y) => lvlRank(x.priority) - lvlRank(y.priority) || byNew(x, y));
+            else if (browseSort === 'difficulty') a.sort((x, y) => lvlRank(x.difficulty) - lvlRank(y.difficulty) || byNew(x, y));
+            else if (browseSort === 'blocker') a.sort((x, y) => blkRank(x.blocker) - blkRank(y.blocker) || byNew(x, y));
+            else a.sort(byNew); // date-desc (default)
+            return a;
+        }
+
+        function onSortChange() {
+            browseSort = document.getElementById('sort-select').value;
+            renderBrowse();
+        }
+
+        // ── COMBINED FILTERS (multi-select) ──
+        function escHtml(s) {
+            return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+        }
+
+        // Short text for a dropdown button given its current selection.
+        function msLabel(dim) {
+            const v = filters[dim];
+            if (!v.length) return 'All';
+            if (v.length === 1) return v[0];
+            return v.length + ' selected';
+        }
+
+        function fillFilterSelect(dim, values) {
+            // Drop any previously-selected values that no longer exist.
+            filters[dim] = filters[dim].filter(x => values.includes(x));
+            msOptions[dim] = values;
+
+            const wrap = document.getElementById('ms-' + dim);
+            wrap.querySelector('.ms-text').textContent = msLabel(dim);
+
+            const panel = document.getElementById('ms-panel-' + dim);
+            if (!values.length) {
+                panel.innerHTML = '<div style="padding:8px 9px;font-size:12px;color:var(--dim)">No options</div>';
+                return;
+            }
+            panel.innerHTML = values.map((v, i) => {
+                const sel = filters[dim].includes(v);
+                return `<div class="ms-row${sel ? ' sel' : ''}" data-dim="${dim}" data-idx="${i}">`
+                    + `<span class="ms-check">${sel ? '✓' : ''}</span><span>${escHtml(v)}</span></div>`;
+            }).join('');
+        }
+
+        function renderFilters() {
+            fillFilterSelect('project', dimValuesPresent('project'));
+            fillFilterSelect('subProject', dimValuesPresent('subProject'));
+            fillFilterSelect('status', dimValuesPresent('status'));
+            fillFilterSelect('priority', dimValuesPresent('priority'));
+            fillFilterSelect('difficulty', dimValuesPresent('difficulty'));
+            fillFilterSelect('blocker', dimValuesPresent('blocker'));
+            fillFilterSelect('recurringFrequency', dimValuesPresent('recurringFrequency'));
+
+            const active = Object.entries(filters).filter(([, v]) => v.length);
+            const summary = document.getElementById('filter-summary');
+            const clearBtn = document.getElementById('clear-filters-btn');
+            if (active.length) {
+                summary.style.display = 'block';
+                summary.textContent = 'Showing: ' + active.map(([k, v]) => `${dimLabel(k)} = ${v.join(', ')}`).join('  ·  ');
+                clearBtn.style.display = 'block';
+            } else {
+                summary.style.display = 'none';
+                clearBtn.style.display = 'none';
+            }
+        }
+
+        // Toggle a single value within a dimension's selection.
+        function toggleFilterValue(dim, value) {
+            const arr = filters[dim];
+            const i = arr.indexOf(value);
+            if (i === -1) arr.push(value); else arr.splice(i, 1);
+            renderBrowse();
+        }
+
+        function openMsDropdown(dim) {
+            document.querySelectorAll('.ms').forEach(el => el.classList.toggle('open', el.id === 'ms-' + dim && !el.classList.contains('open')));
+        }
+
+        function closeMsDropdowns() {
+            document.querySelectorAll('.ms.open').forEach(el => el.classList.remove('open'));
+        }
+
+        // Delegated handlers: open/close dropdowns and toggle option rows.
+        document.addEventListener('click', e => {
+            const btn = e.target.closest('.ms-btn');
+            const row = e.target.closest('.ms-row');
+            if (btn) {
+                openMsDropdown(btn.dataset.ms);
+                return;
+            }
+            if (row) {
+                const dim = row.dataset.dim;
+                toggleFilterValue(dim, msOptions[dim][+row.dataset.idx]);
+                return; // keep the panel open for further multi-selection
+            }
+            if (!e.target.closest('.ms')) closeMsDropdowns();
+        });
+
+        function clearFilters() {
+            filters = { project: [], subProject: [], status: [], priority: [], difficulty: [], blocker: [], recurringFrequency: [] };
+            renderBrowse();
+        }
+
+        function matchesFilters(n) {
+            return Object.keys(filters).every(dim =>
+                !filters[dim].length || filters[dim].includes(dimValue(n, dim)));
+        }
+
+        // ── PROPERTY BADGES ──
+        function levelColor(v) {
+            if (v === 'High' || v === 'Hard') return { bg: 'rgba(244,63,94,0.12)', fg: 'var(--red)', bd: 'rgba(244,63,94,0.3)' };
+            if (v === 'Medium') return { bg: 'rgba(245,158,11,0.12)', fg: 'var(--warn)', bd: 'rgba(245,158,11,0.3)' };
+            if (v === 'Low' || v === 'Easy') return { bg: 'var(--aglo)', fg: 'var(--accent)', bd: 'rgba(124,106,247,0.3)' };
+            return { bg: 'var(--surf2)', fg: 'var(--dim)', bd: 'var(--bdr)' };
+        }
+        function blockerColor(v) {
+            if (v === 'Yes') return { bg: 'rgba(244,63,94,0.12)', fg: 'var(--red)', bd: 'rgba(244,63,94,0.3)' };
+            if (v === 'No') return { bg: 'rgba(16,185,129,0.12)', fg: '#10b981', bd: 'rgba(16,185,129,0.3)' };
+            return { bg: 'var(--surf2)', fg: 'var(--dim)', bd: 'var(--bdr)' };
+        }
+        function statusColor(v) {
+            if (v === 'Doing') return { bg: 'rgba(124,106,247,0.12)', fg: 'var(--accent)', bd: 'rgba(124,106,247,0.3)' };
+            if (v === 'Done') return { bg: 'rgba(16,185,129,0.12)', fg: '#10b981', bd: 'rgba(16,185,129,0.3)' };
+            if (v === 'To Do') return { bg: 'rgba(244,63,94,0.08)', fg: 'var(--red)', bd: 'rgba(244,63,94,0.25)' };
+            if (v === 'On Hold') return { bg: 'rgba(245,158,11,0.12)', fg: 'var(--warn)', bd: 'rgba(245,158,11,0.3)' };
+            if (v === 'Scheduled') return { bg: 'rgba(139,92,246,0.12)', fg: '#8b5cf6', bd: 'rgba(139,92,246,0.3)' };
+            return { bg: 'var(--surf2)', fg: 'var(--dim)', bd: 'var(--bdr)' };
+        }
+        function badgesHTML(n) {
+            const chip = (label, val, c) => !val ? '' :
+                `<span style="font-size:10px;padding:2px 8px;border-radius:20px;background:${c.bg};color:${c.fg};border:1px solid ${c.bd}">${label}: ${val}</span>`;
+            const tag = val => !val ? '' :
+                `<span style="font-size:10px;padding:2px 8px;border-radius:20px;background:var(--surf2);color:var(--dim);border:1px solid var(--bdr)">${escHtml(val)}</span>`;
+            return chip('Status', n.status, statusColor(n.status))
+                + tag(n.project)
+                + tag(n.subProject)
+                + chip('Priority', n.priority, levelColor(n.priority))
+                + chip('Difficulty', n.difficulty, levelColor(n.difficulty))
+                + chip('Blocker', n.blocker, blockerColor(n.blocker))
+                + (n.recurringFrequency ? `<span style="font-size:10px;padding:2px 8px;border-radius:20px;background:var(--surf2);color:var(--dim);border:1px solid var(--bdr)">↺ ${escHtml(n.recurringFrequency)}</span>` : '');
+        }
+
+        function persist() {
+            localStorage.setItem('alfred-notes', JSON.stringify(notes));
+            scheduleSync();
+        }
+
+        function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+        function toTitle(s) { return s.replace(/\w\S*/g, t => t.charAt(0).toUpperCase() + t.slice(1)); }
+        function fmt(iso) {
+            const d = new Date(iso);
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' · ' +
+                d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+        }
+
+        function speak(text) {
+            try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.rate = 1.05; speechSynthesis.speak(u); } catch (_) { }
+        }
+
+        // ── TAB SWITCHING ──
+        function switchTab(tab) {
+            document.getElementById('view-record').classList.toggle('hidden', tab !== 'record');
+            document.getElementById('view-browse').classList.toggle('hidden', tab !== 'browse');
+            document.getElementById('tab-record').style.background = tab === 'record' ? 'var(--accent)' : 'transparent';
+            document.getElementById('tab-record').style.color = tab === 'record' ? '#fff' : 'var(--dim)';
+            document.getElementById('tab-record').style.fontWeight = tab === 'record' ? '600' : '400';
+            document.getElementById('tab-browse').style.background = tab === 'browse' ? 'var(--accent)' : 'transparent';
+            document.getElementById('tab-browse').style.color = tab === 'browse' ? '#fff' : 'var(--dim)';
+            document.getElementById('tab-browse').style.fontWeight = tab === 'browse' ? '600' : '400';
+            if (tab === 'browse') renderBrowse();
+        }
+
+        // ── RECORDING ──
+        function toggleRec() {
+            if (recState === 'rec') doStop();
+            else if (recState === 'idle') startRec();
+        }
+
+        function startRec() {
+            if (!SR) { showError('Speech recognition requires Chrome or Edge.'); return; }
+            setRecState('starting');
+            finalText = ''; draft.content = '';
+            document.getElementById('live-box').style.display = 'none';
+            document.getElementById('live-text').textContent = '';
+            document.getElementById('how-it-works').style.display = 'none';
+            document.getElementById('rec-error').style.display = 'none';
+
+            const r = new SR();
+            r.continuous = true; r.interimResults = true; r.lang = 'en-US';
+
+            r.onstart = () => {
+                setRecState('rec');
+                timeLeft = 30;
+                rTimer = setInterval(() => {
+                    timeLeft--;
+                    document.getElementById('timer-display').textContent = timeLeft + 's';
+                    document.getElementById('ring-progress').style.strokeDashoffset = CIRC - (timeLeft / 30) * CIRC;
+                    if (timeLeft <= 0) doStop();
+                }, 1000);
+            };
+
+            r.onresult = e => {
+                let f = '', i = '';
+                for (let j = 0; j < e.results.length; j++) {
+                    if (e.results[j].isFinal) f += e.results[j][0].transcript + ' ';
+                    else i += e.results[j][0].transcript;
+                }
+                finalText = f;
+                const box = document.getElementById('live-box');
+                box.style.display = 'block';
+                document.getElementById('live-text').textContent = f + i;
+            };
+
+            r.onend = () => { if (isRecRef) { try { r.start(); } catch (_) { } } };
+
+            r.onerror = e => {
+                isRecRef = false;
+                clearInterval(rTimer);
+                rRec = null;
+                setRecState('idle');
+                const msgs = {
+                    'not-allowed': 'Microphone access denied. Click the 🔒 or 🎙 icon in your browser address bar and allow microphone access for this file, then refresh.',
+                    'no-speech': 'No speech detected. Tap record and speak clearly.',
+                };
+                showError(msgs[e.error] || `Recognition error: ${e.error}. Ensure you\'re using Chrome or Edge.`);
+            };
+
+            rRec = r; isRecRef = true;
+            try { r.start(); } catch (err) {
+                isRecRef = false; setRecState('idle');
+                showError('Could not start recording. Check microphone permissions in your browser.');
+            }
+        }
+
+        function doStop() {
+            isRecRef = false;
+            clearInterval(rTimer);
+            if (rRec) { try { rRec.onend = null; rRec.stop(); } catch (_) { } rRec = null; }
+            const content = finalText.trim();
+            if (!content) {
+                setRecState('idle');
+                showError('Nothing was transcribed. Make sure your microphone is working and speak clearly.');
+                document.getElementById('how-it-works').style.display = 'block';
+                return;
+            }
+            draft = { name: '', content, project: '', subProject: '', status: '', recurringFrequency: '' };
+            setRecState('done');
+            document.getElementById('rec-idle').classList.add('hidden');
+            document.getElementById('wizard').classList.remove('hidden');
+            showStep('name');
+        }
+
+        function setRecState(state) {
+            recState = state;
+            const btn = document.getElementById('rec-btn');
+            const ring = document.getElementById('ring-progress');
+            const timer = document.getElementById('timer-display');
+            const label = document.getElementById('rec-label');
+            const sub = document.getElementById('rec-sub');
+
+            if (state === 'idle') {
+                btn.style.background = 'var(--accent)'; btn.style.boxShadow = '0 0 36px rgba(124,106,247,0.25)'; btn.textContent = '🎙';
+                ring.style.display = 'none'; timer.style.display = 'none'; sub.style.display = 'none';
+                label.textContent = 'Tap to start recording'; label.style.color = 'var(--dim)';
+            } else if (state === 'starting') {
+                btn.style.background = 'var(--warn)'; btn.style.boxShadow = '0 0 36px rgba(245,158,11,0.3)'; btn.textContent = '⏳';
+                ring.style.display = 'none'; timer.style.display = 'none'; sub.style.display = 'none';
+                label.textContent = 'Requesting mic access…'; label.style.color = 'var(--warn)';
+            } else if (state === 'rec') {
+                btn.style.background = 'var(--red)'; btn.style.boxShadow = '0 0 36px rgba(244,63,94,0.35)'; btn.textContent = '⏹';
+                ring.style.display = 'block'; ring.style.strokeDashoffset = CIRC;
+                timer.style.display = 'block'; timer.textContent = '30s';
+                sub.style.display = 'block'; label.textContent = 'Recording — tap to stop'; label.style.color = 'var(--dim)';
+            }
+        }
+
+        function showError(msg) {
+            const el = document.getElementById('rec-error');
+            el.style.display = 'block'; el.textContent = msg;
+        }
+
+        // ── WIZARD ──
+        function showStep(s) {
+            currentStep = s;
+            ['name', 'confirm'].forEach(x => {
+                document.getElementById('step-' + x).classList.toggle('hidden', x !== s);
+            });
+            // progress bars
+            const bars = document.querySelectorAll('.prog-bar');
+            const idx = ['name', 'confirm'].indexOf(s);
+            bars.forEach((b, i) => { b.style.background = i <= idx ? 'var(--accent)' : 'var(--bdr)'; });
+
+            if (s === 'confirm') renderConfirm();
+            if (s !== 'confirm') {
+                const tp = document.getElementById('transcript-preview-' + s);
+                if (tp && draft.content) {
+                    tp.classList.remove('hidden');
+                    document.getElementById('tp-' + s + '-text').textContent = draft.content;
+                }
+            }
+
+            if (s === 'name') setTimeout(() => speak('What should I name this memo?'), 300);
+        }
+
+        function nextStep(s) {
+            if (s === 'name') {
+                const v = document.getElementById('draft-name').value.trim();
+                if (v) draft.name = v;
+                showStep('confirm');
+            }
+        }
+
+        function renderConfirm() {
+            document.getElementById('confirm-name').textContent = draft.name || 'Untitled';
+            document.getElementById('confirm-content').textContent = draft.content || '(no transcript captured)';
+        }
+
+        function saveMemo() {
+            notes.unshift({ id: uid(), ...draft, name: draft.name || 'Untitled', priority: 'Medium', difficulty: 'Medium', blocker: 'No', status: draft.status || 'To Do', timestamp: new Date().toISOString() });
+            persist(); updateCount();
+            try { speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance('Memo saved.')); } catch (_) { }
+            discardMemo(); switchTab('browse');
+        }
+
+        function importMemos() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'application/json,.json';
+            input.onchange = (e) => {
+                const file = e.target.files && e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    let data;
+                    try { data = JSON.parse(ev.target.result); }
+                    catch (err) { alert('Could not parse the file as JSON.\n\n' + err.message); return; }
+                    if (!data || data.app !== 'Alfred' || !Array.isArray(data.notes)) {
+                        alert('This does not look like an Alfred export. Expected { "app": "Alfred", "notes": [...] }.');
+                        return;
+                    }
+                    const incoming = data.notes.filter(n => n && typeof n === 'object');
+                    const existingIds = new Set(notes.map(n => n.id));
+                    const newNotes = incoming.filter(n => n.id && !existingIds.has(n.id));
+                    const skipped = incoming.length - newNotes.length;
+                    const msg = `Found ${incoming.length} memo${incoming.length !== 1 ? 's' : ''} in the file.\n`
+                        + `• ${newNotes.length} new (will be added)\n`
+                        + `• ${skipped} already exist (will be skipped)\n\nImport now?`;
+                    if (!confirm(msg)) return;
+
+                    notes = [...newNotes, ...notes].sort((a, b) =>
+                        (b.timestamp || '').localeCompare(a.timestamp || ''));
+
+                    persist();
+                    updateCount();
+                    if (typeof renderBrowse === 'function') renderBrowse();
+                    alert(`Imported ${newNotes.length} memo${newNotes.length !== 1 ? 's' : ''}.`);
+                    switchTab('browse');
+                };
+                reader.onerror = () => alert('Could not read the file.');
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        function exportMemos() {
+            if (notes.length === 0) { alert('No memos to export yet.'); return; }
+            const payload = {
+                app: 'Alfred',
+                version: 1,
+                exportedAt: new Date().toISOString(),
+                notes: notes
+            };
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `alfred-${stamp}.json`;
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }
+
+        function discardMemo() {
+            draft = { name: '', content: '', project: '', subProject: '', status: '', recurringFrequency: '' };
+            currentStep = null;
+            document.getElementById('wizard').classList.add('hidden');
+            document.getElementById('rec-idle').classList.remove('hidden');
+            document.getElementById('how-it-works').style.display = 'block';
+            document.getElementById('live-box').style.display = 'none';
+            document.getElementById('rec-error').style.display = 'none';
+            setRecState('idle');
+        }
+
+        // ── WIZARD VOICE INPUT ──
+        function wizVoice(field) {
+            if (!SR) return;
+            if (wRec) { try { wRec.stop(); } catch (_) { } }
+            const btn = document.getElementById('voice-btn-' + field);
+            let t = 10;
+            btn.textContent = `🎤 Listening ${t}s`;
+            btn.style.color = 'var(--accent)'; btn.style.borderColor = 'var(--accent)'; btn.style.background = 'var(--aglo)';
+
+            const r = new SR();
+            r.continuous = false; r.interimResults = false; r.lang = 'en-US';
+            wRec = r;
+
+            wTimer = setInterval(() => {
+                t--;
+                btn.textContent = `🎤 Listening ${t}s`;
+                if (t <= 0) { clearInterval(wTimer); try { r.stop(); } catch (_) { } resetVoiceBtn(field); }
+            }, 1000);
+
+            r.onresult = e => {
+                clearInterval(wTimer);
+                resetVoiceBtn(field);
+                const res = e.results[0][0].transcript.trim();
+                if (field === 'name') {
+                    draft.name = res;
+                    document.getElementById('draft-name').value = res;
+                }
+            };
+            const done = () => { clearInterval(wTimer); resetVoiceBtn(field); };
+            r.onerror = done; r.onend = done;
+            try { r.start(); } catch (_) { done(); }
+        }
+
+        function resetVoiceBtn(field) {
+            const btn = document.getElementById('voice-btn-' + field);
+            if (!btn) return;
+            btn.textContent = '🎤 Voice input'; btn.style.color = 'var(--dim)'; btn.style.borderColor = 'var(--bdr)'; btn.style.background = 'var(--surf2)';
+        }
+
+        // ── BROWSE ──
+        function makeCard(n) {
+            const card = document.createElement('div');
+            card.style.cssText = 'background:var(--surf);border:1px solid var(--bdr);border-radius:12px;padding:13px 15px;margin-bottom:8px;cursor:pointer;transition:border-color 0.15s';
+            const badges = badgesHTML(n);
+            card.innerHTML = `
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div style="font-weight:600;font-size:15px;flex:1;padding-right:8px">${n.name}</div>
+            <div style="display:flex;gap:2px;flex-shrink:0">
+              <button onclick="event.stopPropagation();openEdit('${n.id}')" title="Edit memo" style="background:none;border:none;color:var(--dim);font-size:14px;cursor:pointer;padding:0 6px">✎</button>
+              <button onclick="event.stopPropagation();deleteNote('${n.id}')" title="Delete memo" style="background:none;border:none;color:var(--dim);font-size:14px;cursor:pointer;padding:0 2px">✕</button>
+            </div>
+          </div>
+          <div style="font-size:11px;color:var(--dim);margin-top:3px">${fmt(n.timestamp)}</div>
+          ${badges ? `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">${badges}</div>` : ''}
+          ${n.blocker === 'Yes' && n.blockerReason ? `<div style="margin-top:7px;font-size:12px;color:var(--red);line-height:1.5">🚧 ${n.blockerReason}</div>` : ''}
+          <div class="note-content hidden" style="margin-top:11px;padding-top:11px;border-top:1px solid var(--bdr);font-size:14px;color:var(--txt);line-height:1.75">${n.content || '(no transcript captured)'}</div>`;
+            card.onclick = () => {
+                const el = card.querySelector('.note-content');
+                const open = !el.classList.contains('hidden');
+                el.classList.toggle('hidden', open);
+                card.style.borderColor = open ? 'var(--bdr)' : 'var(--accent)';
+            };
+            return card;
+        }
+
+        function renderBrowse() {
+            const q = (document.getElementById('search-input').value || '').toLowerCase();
+
+            // Dimension selector
+            const ds = document.getElementById('dim-selector');
+            ds.innerHTML = '';
+            DIMS.forEach(d => {
+                const b = document.createElement('button');
+                b.className = 'pill' + (browseDim === d.key ? ' active' : '');
+                b.style.whiteSpace = 'nowrap'; b.textContent = d.label;
+                b.onclick = () => { browseDim = d.key; renderBrowse(); };
+                ds.appendChild(b);
+            });
+
+            // Combined property filters
+            renderFilters();
+
+            const filtered = notes.filter(n => {
+                const mq = !q || n.name.toLowerCase().includes(q) || (n.content || '').toLowerCase().includes(q);
+                return mq && matchesFilters(n);
+            });
+
+            const bc = document.getElementById('browse-content');
+            if (!filtered.length) {
+                bc.innerHTML = `<div style="text-align:center;color:var(--dim);padding-top:40px;font-size:14px;line-height:2">
+      ${notes.length === 0 ? '<div style="font-size:36px;margin-bottom:8px">🎙</div><div>Record your first memo</div>' : 'No memos match your search and filters'}
+    </div>`;
+                return;
+            }
+            bc.innerHTML = '';
+
+            const sectionHeader = (text) => `<div style="font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:2px;margin-bottom:12px;display:flex;align-items:center;gap:10px">${text}<div style="flex:1;height:1px;background:var(--bdr)"></div></div>`;
+
+            // Single-level grouping by the chosen dimension
+            const grouped = {};
+            filtered.forEach(n => {
+                const v = dimValue(n, browseDim);
+                if (!grouped[v]) grouped[v] = [];
+                grouped[v].push(n);
+            });
+            dimValuesPresent(browseDim).filter(v => grouped[v]).forEach(v => {
+                const div = document.createElement('div');
+                div.style.cssText = 'margin-bottom:26px';
+                div.innerHTML = sectionHeader(`${dimLabel(browseDim)}: ${v}`);
+                sortNotes(grouped[v]).forEach(n => div.appendChild(makeCard(n)));
+                bc.appendChild(div);
+            });
+        }
+
+        function deleteNote(id) {
+            notes = notes.filter(n => n.id !== id); persist(); updateCount(); renderBrowse();
+        }
+
+        let editingId = null;
+
+        function openEdit(id) {
+            const note = notes.find(n => n.id === id);
+            if (!note) return;
+            editingId = id;
+            document.getElementById('edit-name').value = note.name || '';
+            document.getElementById('edit-content').value = note.content || '';
+            document.getElementById('edit-priority').value = note.priority || '';
+            document.getElementById('edit-difficulty').value = note.difficulty || '';
+            document.getElementById('edit-blocker').value = note.blocker || '';
+            document.getElementById('edit-blocker-reason').value = note.blockerReason || '';
+            document.getElementById('edit-status').value = note.status || '';
+            document.getElementById('edit-recur').value = note.recurringFrequency || '';
+            document.getElementById('edit-project').value = note.project || '';
+            document.getElementById('edit-sub-project').value = note.subProject || '';
+            onBlockerChange();
+            document.getElementById('edit-modal').style.display = 'flex';
+        }
+
+        function closeEdit() {
+            editingId = null;
+            document.getElementById('edit-modal').style.display = 'none';
+        }
+
+        function onBlockerChange() {
+            const isBlocked = document.getElementById('edit-blocker').value === 'Yes';
+            document.getElementById('edit-blocker-reason-wrap').style.display = isBlocked ? 'block' : 'none';
+        }
+
+        function saveEdit() {
+            if (!editingId) return;
+            const idx = notes.findIndex(n => n.id === editingId);
+            if (idx === -1) { closeEdit(); return; }
+
+            const name = document.getElementById('edit-name').value.trim();
+            const content = document.getElementById('edit-content').value;
+
+            notes[idx] = {
+                ...notes[idx],
+                name: name || 'Untitled',
+                content: content,
+                priority: document.getElementById('edit-priority').value,
+                difficulty: document.getElementById('edit-difficulty').value,
+                blocker: document.getElementById('edit-blocker').value,
+                blockerReason: document.getElementById('edit-blocker').value === 'Yes'
+                    ? document.getElementById('edit-blocker-reason').value.trim() : '',
+                status: document.getElementById('edit-status').value,
+                recurringFrequency: document.getElementById('edit-recur').value,
+                project: document.getElementById('edit-project').value,
+                subProject: document.getElementById('edit-sub-project').value,
+            };
+
+            persist();
+            updateCount();
+            renderBrowse();
+            closeEdit();
+        }
+
+        function updateCount() {
+            document.getElementById('memo-count').textContent = `${notes.length} memo${notes.length !== 1 ? 's' : ''} saved`;
+        }
+
+        initApp();
+    </script>
+</body>
+
+</html>
