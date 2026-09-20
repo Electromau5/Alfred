@@ -140,6 +140,26 @@ Two entries conflict when they share a date and their `[start, end)` minute rang
 The modal generates standard affirmation text per trigger, live-updating as you type the
 justification, with a copy-to-clipboard button.
 
+### Accent-tolerant name matching (`nameSimilarity`, `bestFuzzyMatch`, `mergeNames`)
+Dictation renders the same surname differently between entries, which silently splits one
+defendant across several cases, each tracking its own cap. Three layers address it:
+
+1. **`speechLang`** (default `en-GB`, picker on the Log tab, saved per device). `r.lang` was
+   hardcoded `en-US`; matching the dialect to the speaker is the single biggest accuracy win.
+2. **`nameSimilarity`** scores two names by the better of Levenshtein ratio and `phoneticKey`
+   similarity, comparing both the whole string and the last word — surnames carry the
+   identity, so "Zimler" stays close to "Douglas Zimbler" while "Douglas Martin" does not
+   match merely through a shared first name. `NAME_MATCH_THRESHOLD` (0.72) sits in a measured
+   gap: worst true match 0.75, best false match 0.63.
+3. **`mergeNames(field, from, into)`** reunites names that already fragmented, surfaced by
+   `renderDuplicateBanner()` on the Vouchers tab.
+
+**A suggestion is never applied automatically.** `renderNameSuggestion` offers the existing
+name and waits for a tap. A wrong auto-match would bill work to the wrong defendant
+unnoticed — the exact failure fixed in `fcf3653`. Keep it suggest-only. Because declining
+costs one tap and a miss costs a split voucher, the threshold deliberately errs toward
+offering; near-miss surnames (Anderson/Henderson) will be suggested, which is intended.
+
 ### Filtering & export (`filteredEntries`, `renderFilterBar`, `exportCSV`)
 Filters live in `filters` and are applied by `filteredEntries()`. `renderFilterBar()` prints
 what is active and how many rows match, and carries the export button, so the filtered export

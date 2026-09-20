@@ -678,6 +678,61 @@
             align-items: end;
         }
 
+        /* On a phone the trailing action squeezes banner text to one word per line.
+           Let it wrap onto its own row instead. */
+        @media (max-width: 560px) {
+            .banner {
+                flex-wrap: wrap;
+            }
+
+            .banner .body {
+                flex: 1 1 auto;
+                min-width: 0;
+            }
+
+            .banner > .btn {
+                flex: 1 0 100%;
+                width: 100%;
+            }
+        }
+
+        #lang-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 14px;
+            font-size: 12px;
+            color: var(--dim);
+        }
+
+        #lang-row select {
+            background: var(--surf);
+            border: 1px solid var(--bdr2);
+            border-radius: 7px;
+            padding: 5px 8px;
+            font-size: 12.5px;
+            color: var(--txt2);
+            outline: none;
+        }
+
+        .suggest {
+            margin-top: 8px;
+            background: var(--wglo);
+            border: 1px solid #fde68a;
+            border-radius: 9px;
+            padding: 10px 12px;
+            font-size: 12.5px;
+            color: #92400e;
+            line-height: 1.55;
+        }
+
+        .suggest-acts {
+            display: flex;
+            gap: 7px;
+            margin-top: 9px;
+            flex-wrap: wrap;
+        }
+
         #filter-bar {
             display: flex;
             align-items: center;
@@ -855,6 +910,10 @@
                     <div id="rec-sub" class="hidden"
                         style="font-size:12px;color:var(--dim2);margin-top:4px">Say the case, the attorney, what you
                         did, and how long.</div>
+                    <div id="lang-row">
+                        <label for="speech-lang">Voice language</label>
+                        <select id="speech-lang" onchange="setSpeechLang(this.value)"></select>
+                    </div>
                     </div>
 
                     <div id="rec-error" class="banner banner-red hidden"
@@ -942,6 +1001,7 @@
 
         <!-- ══════════ VOUCHERS VIEW ══════════ -->
         <section id="view-vouchers" class="hidden">
+            <div id="dup-banner"></div>
             <div id="vouchers-body"></div>
         </section>
     </div>
@@ -1028,6 +1088,16 @@
             'Phone Call / Conference', 'Report Writing', 'Court Testimony', 'Travel', 'Other'];
         const MODES = ['Out-of-Court', 'In-Court'];
 
+        // Web Speech is markedly more accurate when the dialect matches the speaker.
+        // en-US on a British voice is a large part of why the same name came back
+        // transcribed differently each time.
+        const SPEECH_LANGS = [
+            ['en-GB', 'English (UK)'], ['en-US', 'English (US)'], ['en-AU', 'English (Australia)'],
+            ['en-IE', 'English (Ireland)'], ['en-IN', 'English (India)'], ['en-CA', 'English (Canada)'],
+            ['en-NZ', 'English (New Zealand)'], ['en-ZA', 'English (South Africa)']
+        ];
+        const NAME_MATCH_THRESHOLD = 0.72;   // suggest an existing name at or above this
+
         const EXAMPLES = [
             'Review phone extraction for Douglas Zimbler with Gloria Keum for 1.5 hrs',
             'Call with attorney regarding Joaquin Diaz discovery download 45 mins',
@@ -1042,6 +1112,7 @@
         let editingId = null;
         let filters = { caseName: '', attorney: '', from: '', to: '', conflictsOnly: false };
         let activeTab = 'log';
+        let speechLang = localStorage.getItem('alfred-speech-lang') || 'en-GB';
 
         // ── Recording state (ported from the memo recorder) ──
         // `let`, not `const`: the no-speech degradation paths are only testable if this
@@ -1429,6 +1500,85 @@
             'yesterday', 'hour', 'hours', 'minute', 'minutes', 'testimony', 'extraction', 'analysis',
             'download', 'writing', 'travel', 'other', 'with', 'from', 'about', 'regarding']);
 
+        // ═════════ FUZZY NAME MATCHING ═════════
+        // Dictation renders the same surname differently from one entry to the next, which
+        // silently splits one defendant into several cases and therefore several vouchers.
+        // These score how likely two spoken names are the same person. Nothing here ever
+        // rewrites a field on its own — the result is only ever offered as a suggestion.
+        function levenshtein(a, b) {
+            if (a === b) return 0;
+            if (!a.length) return b.length;
+            if (!b.length) return a.length;
+            let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+            for (let i = 1; i <= a.length; i++) {
+                const cur = [i];
+                for (let j = 1; j <= b.length; j++) {
+                    cur[j] = Math.min(
+                        prev[j] + 1,
+                        cur[j - 1] + 1,
+                        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+                    );
+                }
+                prev = cur;
+            }
+            return prev[b.length];
+        }
+
+        function ratio(a, b) {
+            if (!a && !b) return 1;
+            if (!a || !b) return 0;
+            const longest = Math.max(a.length, b.length);
+            return 1 - levenshtein(a, b) / longest;
+        }
+
+        function normName(s) {
+            return String(s || '').toLowerCase().replace(/,?\s*esq\.?/g, '')
+                .replace(/[^a-z\s]/g, '').replace(/\s+/g, ' ').trim();
+        }
+
+        // Rough English phonetic key. Collapses the consonant confusions that separate
+        // one accent's transcription from another's: s/z, b/p, d/t, c/k/g, m/n, f/v.
+        function phoneticKey(str) {
+            let t = String(str || '').toLowerCase().replace(/[^a-z]/g, '');
+            if (!t) return '';
+            t = t.replace(/ph/g, 'f').replace(/sch/g, 'sk').replace(/ch/g, 'k')
+                .replace(/sh/g, 's').replace(/th/g, 't').replace(/ck/g, 'k')
+                .replace(/gh/g, 'g').replace(/kn/g, 'n').replace(/wr/g, 'r').replace(/mb$/, 'm');
+            const lead = /^[aeiou]/.test(t) ? t[0] : '';
+            t = t.replace(/[aeiouyhw]/g, '')
+                .replace(/[fv]/g, 'f').replace(/[bp]/g, 'b').replace(/[cgjkqx]/g, 'k')
+                .replace(/[dt]/g, 't').replace(/[sz]/g, 's').replace(/[mn]/g, 'n')
+                .replace(/(.)\1+/g, '$1');
+            return (lead + t).slice(0, 10);
+        }
+
+        // Surnames carry the identity, so the last word is compared as well as the whole
+        // string. That keeps "Zimler" close to "Douglas Zimbler" without making
+        // "Douglas Martin" look like a match just because a first name is shared.
+        function nameSimilarity(a, b) {
+            const A = normName(a), B = normName(b);
+            if (!A || !B) return 0;
+            if (A === B) return 1;
+            const full = Math.max(ratio(A, B), ratio(phoneticKey(A), phoneticKey(B)));
+            const la = A.split(' ').pop(), lb = B.split(' ').pop();
+            const last = Math.max(ratio(la, lb), ratio(phoneticKey(la), phoneticKey(lb)));
+            return Math.max(full, last);
+        }
+
+        // Closest known name, when it is close enough to be worth offering and is not
+        // already what was typed.
+        function bestFuzzyMatch(list, name) {
+            const norm = normName(name);
+            if (!norm) return null;
+            let best = null, bestScore = 0;
+            for (const candidate of list) {
+                if (normName(candidate) === norm) return null;   // already exact
+                const score = nameSimilarity(name, candidate);
+                if (score > bestScore) { bestScore = score; best = candidate; }
+            }
+            return bestScore >= NAME_MATCH_THRESHOLD ? { name: best, score: bestScore } : null;
+        }
+
         // Match a known name: the full name anywhere in the text, or a distinctive word
         // from it. "Zimbler" still resolves to "Douglas Zimbler"; "defendant" resolves to
         // nothing.
@@ -1683,7 +1833,7 @@
             document.getElementById('rec-error').classList.add('hidden');
 
             const r = new SR();
-            r.continuous = true; r.interimResults = true; r.lang = 'en-US';
+            r.continuous = true; r.interimResults = true; r.lang = speechLang;
 
             // Android restarts the recognition session on every pause, firing onstart
             // again each time. Starting the countdown here would reset it to 60s and leak
@@ -1822,9 +1972,11 @@
             const d = draft;
             document.getElementById('r-form').innerHTML =
                 '<div class="field"><label for="r-case">Case / defendant</label>' +
-                '<input id="r-case" class="inp" list="dl-cases" value="' + esc(d.caseName) + '" placeholder="e.g. Douglas Zimbler" oninput="onReviewChange()"></div>' +
+                '<input id="r-case" class="inp" list="dl-cases" value="' + esc(d.caseName) + '" placeholder="e.g. Douglas Zimbler" oninput="onReviewChange()">' +
+                '<div id="r-case-suggest"></div></div>' +
                 '<div class="field"><label for="r-attorney">Attorney / retaining counsel</label>' +
-                '<input id="r-attorney" class="inp" list="dl-attorneys" value="' + esc(d.attorney) + '" placeholder="e.g. Gloria Keum, Esq." oninput="onReviewChange()"></div>' +
+                '<input id="r-attorney" class="inp" list="dl-attorneys" value="' + esc(d.attorney) + '" placeholder="e.g. Gloria Keum, Esq." oninput="onReviewChange()">' +
+                '<div id="r-attorney-suggest"></div></div>' +
                 '<div class="field"><label for="r-date">Date</label>' +
                 '<input id="r-date" type="date" class="inp" value="' + esc(d.date) + '" oninput="onReviewChange()"></div>' +
                 '<div class="field"><label for="r-start">Start time</label>' +
@@ -1864,7 +2016,54 @@
             renderReviewWarnings();
         }
 
+        // Offers an existing name when dictation produced a near-miss. Deliberately never
+        // rewrites the field itself: a wrong auto-match would bill work to the wrong
+        // defendant without anyone noticing.
+        function renderNameSuggestion(field) {
+            const isCase = field === 'case';
+            const box = document.getElementById('r-' + field + '-suggest');
+            if (!box) return;
+            const typed = isCase ? draft.caseName : draft.attorney;
+            const dismissed = isCase ? draft.dismissedCase : draft.dismissedAttorney;
+            const hit = dismissed === normName(typed)
+                ? null
+                : bestFuzzyMatch(isCase ? caseNames() : attorneyNames(), typed);
+            if (!hit) { box.innerHTML = ''; return; }
+            box.innerHTML = '<div class="suggest">' +
+                '<strong>Did you mean ' + esc(hit.name) + '?</strong><br>' +
+                'You already have ' + (isCase ? 'a case' : 'an attorney') + ' by that name. ' +
+                'Dictation often spells the same name differently, which would split the ' +
+                (isCase ? 'voucher across two cases' : 'entries across two attorneys') + '.' +
+                '<div class="suggest-acts">' +
+                '<button class="btn btn-sm btn-primary" onclick="acceptSuggestion(\'' + field + '\')">Use ' + esc(hit.name) + '</button>' +
+                '<button class="btn btn-sm" onclick="dismissSuggestion(\'' + field + '\')">Keep &ldquo;' + esc(typed) + '&rdquo;</button>' +
+                '</div></div>';
+        }
+
+        function acceptSuggestion(field) {
+            const isCase = field === 'case';
+            const hit = bestFuzzyMatch(isCase ? caseNames() : attorneyNames(),
+                isCase ? draft.caseName : draft.attorney);
+            if (!hit) return;
+            document.getElementById('r-' + field).value = hit.name;
+            if (isCase) {
+                // Adopt the established case's attorney and rate along with its name.
+                const cfg = caseCfg(hit.name);
+                if (cfg.attorney && !draft.attorney) document.getElementById('r-attorney').value = cfg.attorney;
+                document.getElementById('r-rate').value = cfg.rate;
+            }
+            onReviewChange();
+        }
+
+        function dismissSuggestion(field) {
+            if (field === 'case') draft.dismissedCase = normName(draft.caseName);
+            else draft.dismissedAttorney = normName(draft.attorney);
+            renderNameSuggestion(field);
+        }
+
         function renderReviewWarnings() {
+            renderNameSuggestion('case');
+            renderNameSuggestion('attorney');
             // ── Overlap ──
             const box = document.getElementById('r-conflict');
             const bad = conflictsFor(draft, draft.id);
@@ -1986,6 +2185,19 @@
         }
 
         // ═══════════════ TABS & RENDER ═══════════════
+        function setSpeechLang(v) {
+            speechLang = v;
+            try { localStorage.setItem('alfred-speech-lang', v); } catch (_) { }
+        }
+
+        function buildLangPicker() {
+            const sel = document.getElementById('speech-lang');
+            if (!sel) return;
+            sel.innerHTML = SPEECH_LANGS
+                .map(l => '<option value="' + l[0] + '"' + (l[0] === speechLang ? ' selected' : '') + '>' + l[1] + '</option>')
+                .join('');
+        }
+
         function switchTab(tab) {
             activeTab = tab;
             ['log', 'entries', 'vouchers'].forEach(t => {
@@ -2201,10 +2413,71 @@
         }
 
         // ═══════════════ VOUCHERS ═══════════════
+        // Dictation spelling one name two ways splits a defendant across two vouchers,
+        // each tracking its cap separately. Surface those pairs so they can be reunited.
+        function findDuplicatePairs(names) {
+            const out = [];
+            for (let i = 0; i < names.length; i++) {
+                for (let j = i + 1; j < names.length; j++) {
+                    const score = nameSimilarity(names[i], names[j]);
+                    if (score >= NAME_MATCH_THRESHOLD) out.push({ a: names[i], b: names[j], score });
+                }
+            }
+            return out.sort((x, y) => y.score - x.score);
+        }
+
+        function countFor(field, value) {
+            return entries.filter(e => e[field] === value).length;
+        }
+
+        function mergeNames(field, from, into) {
+            const n = countFor(field, from);
+            const what = field === 'caseName' ? 'case' : 'attorney';
+            if (!confirm('Merge the ' + what + ' \u201C' + from + '\u201D into \u201C' + into + '\u201D?\n\n' +
+                n + ' ' + (n === 1 ? 'entry moves' : 'entries move') + ' across. The combined work then bills ' +
+                'as one ' + what + '. This cannot be undone automatically.')) return;
+            entries.forEach(e => { if (e[field] === from) e[field] = into; });
+            if (field === 'caseName') {
+                caseBook = caseBook.filter(c => c.name !== from);
+                ensureCase(into, '');
+            } else {
+                caseBook.forEach(c => { if (c.attorney === from) c.attorney = into; });
+            }
+            persist();
+            renderAll();
+            flashHeader('Merged \u201C' + from + '\u201D into \u201C' + into + '\u201D');
+        }
+
+        function dupRowHTML(field, pair) {
+            const q = v => esc(v).replace(/'/g, '&#39;');
+            const side = (keep, drop) =>
+                '<button class="btn btn-sm btn-primary" onclick="mergeNames(\'' + field + '\',\'' +
+                q(drop) + '\',\'' + q(keep) + '\')">Keep &ldquo;' + esc(keep) + '&rdquo;</button>';
+            return '<div style="margin-top:10px">' +
+                '<div>' + esc(pair.a) + ' (' + countFor(field, pair.a) + ') &nbsp;\u2194&nbsp; ' +
+                esc(pair.b) + ' (' + countFor(field, pair.b) + ')</div>' +
+                '<div class="suggest-acts">' + side(pair.b, pair.a) + side(pair.a, pair.b) + '</div></div>';
+        }
+
+        function renderDuplicateBanner() {
+            const box = document.getElementById('dup-banner');
+            const caseDups = findDuplicatePairs(caseNames());
+            const attyDups = findDuplicatePairs(attorneyNames());
+            if (!caseDups.length && !attyDups.length) { box.innerHTML = ''; return; }
+            box.innerHTML = '<div class="banner banner-warn" style="margin-bottom:16px"><div class="ico">\u26A0</div>' +
+                '<div class="body"><strong>These look like the same name spelled two ways</strong>' +
+                'Each one bills as a separate voucher with its own cap. Pick the spelling to keep.' +
+                caseDups.map(pr => dupRowHTML('caseName', pr)).join('') +
+                attyDups.map(pr => dupRowHTML('attorney', pr)).join('') +
+                '</div></div>';
+        }
+
         function renderVouchers() {
+            renderDuplicateBanner();
             const names = caseNames();
             const body = document.getElementById('vouchers-body');
             if (!names.length) {
+                document.getElementById('dup-banner').innerHTML = '';
                 body.innerHTML = '<div class="card"><div class="empty">No cases yet.<br>Log time on the <strong>Log Time</strong> tab and each case will appear here with its own cap meter.</div></div>';
                 return;
             }
@@ -2583,6 +2856,7 @@
         // ═══════════════ INIT ═══════════════
         async function initApp() {
             renderChips();
+            buildLangPicker();
             sortEntries();
             renderAll();
             applySpeechSupport();
