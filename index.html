@@ -702,6 +702,73 @@
             }
         }
 
+        tr.edit-ctl td {
+            background: var(--surf2);
+            border-bottom: 2px solid var(--accent);
+        }
+
+        .edit-voice {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .edit-voice-spacer {
+            flex: 1;
+        }
+
+        #ed-voice-hint {
+            font-size: 12px;
+            color: var(--dim2);
+        }
+
+        #ed-mic.listening {
+            background: var(--rglo);
+            border-color: #fecaca;
+            color: var(--red);
+        }
+
+        .diff {
+            margin-top: 12px;
+            border: 1px solid #bfdbfe;
+            background: var(--aglo);
+            border-radius: 9px;
+            padding: 12px 14px;
+        }
+
+        .diff-row {
+            display: flex;
+            gap: 8px;
+            align-items: baseline;
+            font-size: 13px;
+            padding: 3px 0;
+            flex-wrap: wrap;
+        }
+
+        .diff-row b {
+            min-width: 92px;
+            font-weight: 650;
+            color: var(--txt);
+        }
+
+        .diff-old {
+            color: var(--dim);
+            text-decoration: line-through;
+        }
+
+        .diff-new {
+            color: var(--accent);
+            font-weight: 650;
+        }
+
+        .heard {
+            font-size: 12px;
+            color: var(--dim);
+            font-style: italic;
+            margin-top: 8px;
+        }
+
         #sync-pill {
             display: inline-flex;
             align-items: center;
@@ -1987,6 +2054,137 @@
             return out;
         }
 
+        // ═══════════ VOICE EDIT COMMANDS ═══════════
+        // Editing by voice is a DIFF, not a re-parse. "Change the hours to three" must
+        // leave the case, attorney and date untouched, so each utterance is scanned for
+        // field triggers and only the named fields are touched.
+        const EDIT_FIELDS = [
+            { key: 'hours', re: /\b(?:hours?|duration|length|time spent)\b/ },
+            { key: 'start', re: /\bstart(?:ed|ing|s)?(?:\s+time)?\b|\bbegan\b|\bbegin(?:s|ning)?\b/ },
+            { key: 'end', re: /\bend(?:ed|ing|s)?(?:\s+time)?\b|\bfinish(?:ed)?\b|\buntil\b/ },
+            { key: 'date', re: /\b(?:date|day)\b/ },
+            { key: 'caseName', re: /\b(?:case|defendant|matter|client)\b/ },
+            { key: 'attorney', re: /\b(?:attorney|counsel|lawyer)\b/ },
+            { key: 'category', re: /\b(?:category|activity|type of work|kind of work)\b/ },
+            { key: 'mode', re: /\b(?:location|in[- ]court|out[- ]of[- ]court|courtroom)\b/ },
+            { key: 'rate', re: /\b(?:rate|hourly|per hour)\b/ },
+            { key: 'description', re: /\b(?:description|narrative|notes?|wording)\b/ }
+        ];
+
+        const EDIT_LABELS = {
+            hours: 'Hours', start: 'Start time', end: 'End time', date: 'Date',
+            caseName: 'Case', attorney: 'Attorney', category: 'Activity type',
+            mode: 'Location', rate: 'Rate', description: 'Description'
+        };
+
+        // `strict` is used by the no-field-named fallback, where the whole utterance is
+        // tested against every field. Loose thresholds there turn conversational filler
+        // ("right then") into a category change, so the fallback demands real evidence.
+        function editFieldValue(key, raw, trigger, strict) {
+            const val = String(raw || '').trim();
+            const low = ' ' + val.toLowerCase() + ' ';
+
+            if (key === 'mode') {
+                const t = (trigger || '').toLowerCase();
+                if (/in[- ]court|courtroom/.test(t) || /\bin[- ]court\b|\bcourtroom\b/.test(low)) return 'In-Court';
+                if (/out[- ]of[- ]court/.test(t) || /\bout[- ]of[- ]court\b/.test(low)) return 'Out-of-Court';
+                return null;
+            }
+            if (key === 'hours') {
+                const mins = parseDuration(low);
+                if (mins) return round2(mins / 60);
+                if (strict) return null;          // a bare number is only meaningful after "hours"
+                const n = val.match(/(\d+(?:\.\d+)?)/);
+                return n ? round2(parseFloat(n[1])) : null;
+            }
+            if (key === 'rate') {
+                const n = val.replace(/,/g, '').match(/(\d+(?:\.\d+)?)/);
+                return n ? parseFloat(n[1]) : null;
+            }
+            if (key === 'start' || key === 'end') {
+                const times = findClockTimes(low);
+                return times.length ? toHHMM(times[0]) : null;
+            }
+            if (key === 'date') {
+                const d = parseDate(low);
+                // parseDate always falls back to today, so only accept it when a real date
+                // cue was spoken. Bare prepositions like "on" are deliberately excluded —
+                // they occur in almost any sentence, and "hold on a second" was being read
+                // as a date change. \d sits outside the word boundaries so multi-digit
+                // dates like "the 25th of December 2025" still register.
+                // Months are spelled out rather than "jan\w*" — a trailing \w* makes "may"
+                // swallow "maybe". Bare "may" is omitted entirely: it is a modal verb far
+                // more often than a month, and any real May date carries a day number,
+                // which the \d branch already catches.
+                const cue = /\b(?:today|yesterday|tomorrow|ago|last|sunday|monday|tuesday|wednesday|thursday|friday|saturday|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b|\d/;
+                return cue.test(low) ? d : null;
+            }
+            if (key === 'category') {
+                let best = null, score = 0;
+                CATEGORIES.forEach(c => {
+                    // "Other" is a catch-all label, not something to match by sound.
+                    if (c === 'Other') return;
+                    const sc = nameSimilarity(val, c);
+                    if (sc > score) { score = sc; best = c; }
+                });
+                if (/\bother\b/.test(low)) return 'Other';
+                return score >= (strict ? 0.85 : 0.68) ? best : null;
+            }
+            if (key === 'caseName' || key === 'attorney') {
+                const cleaned = cleanName(toTitle(val));
+                if (!cleaned) return null;
+                const list = key === 'caseName' ? caseNames() : attorneyOptions();
+                const exact = list.find(n => normName(n) === normName(cleaned));
+                if (exact) return exact;
+                const hit = bestFuzzyMatch(list, cleaned);
+                return hit ? hit.name : cleaned;
+            }
+            if (key === 'description') return val ? val.charAt(0).toUpperCase() + val.slice(1) : null;
+            return null;
+        }
+
+        // Returns { changes, heard } — changes maps field -> new value.
+        function parseEditCommand(text) {
+            const orig = ' ' + String(text || '').trim().replace(/\s+/g, ' ') + ' ';
+            const low = orig.toLowerCase();
+
+            const hits = [];
+            EDIT_FIELDS.forEach(f => {
+                const re = new RegExp(f.re.source, 'gi');
+                let m;
+                while ((m = re.exec(low)) !== null) {
+                    hits.push({ key: f.key, start: m.index, end: m.index + m[0].length, word: m[0] });
+                    if (m.index === re.lastIndex) re.lastIndex++;
+                }
+            });
+            hits.sort((a, b) => a.start - b.start);
+
+            const seen = new Set(), ordered = [];
+            for (const h of hits) { if (!seen.has(h.key)) { seen.add(h.key); ordered.push(h); } }
+
+            const changes = {};
+            ordered.forEach((h, i) => {
+                const next = ordered[i + 1];
+                // A trigger that is itself the value (e.g. "in-court") keeps its own text.
+                const slice = h.key === 'mode' ? h.word : orig.slice(h.end, next ? next.start : orig.length);
+                const cleaned = String(slice).replace(/^\s*(?:to|is|as|was|should\s+be|=|:)\s+/i, '')
+                    .replace(/\s+and\s*$/i, '').trim();
+                const v = editFieldValue(h.key, cleaned, h.word);
+                if (v !== null && v !== undefined && v !== '') changes[h.key] = v;
+            });
+
+            // Nothing named a field — infer from the shape of what was said.
+            if (!Object.keys(changes).length) {
+                const whole = orig.trim();
+                const inferred = ['mode', 'category', 'hours', 'date'];
+                for (const k of inferred) {
+                    const v = editFieldValue(k, whole, '', true);
+                    if (v !== null && v !== undefined && v !== '') { changes[k] = v; break; }
+                }
+            }
+            return { changes, heard: orig.trim() };
+        }
+
         // ═══════════════ VOICE RECORDING ═══════════════
         function toggleRec() {
             if (recState === 'rec') doStop();
@@ -2648,15 +2846,180 @@
                 '<td><select id="ed-mode" class="row-inp">' + mod + '</select></td>' +
                 '<td class="desc"><textarea id="ed-desc" class="row-inp" style="min-height:62px">' + esc(e.description) + '</textarea></td>' +
                 '<td><input id="ed-rate" type="number" min="0" step="5" class="row-inp" value="' + e.rate + '"></td>' +
-                '<td class="acts">' +
-                '<button class="btn btn-sm btn-primary" onclick="saveEdit()">Save</button> ' +
-                '<button class="btn btn-sm" onclick="cancelEdit()">Cancel</button></td></tr>';
+                '<td class="acts"></td></tr>' +
+                // Second row spans the table so the voice control and its change preview
+                // have room; on a phone the field row alone is far too cramped.
+                '<tr class="edit-ctl"><td colspan="10">' +
+                '<div class="edit-voice">' +
+                '<button class="btn btn-sm" id="ed-mic" onclick="toggleEditVoice()">\uD83C\uDFA4 Say a change</button>' +
+                '<span id="ed-voice-hint">e.g. \u201Cchange the hours to three\u201D or \u201Cthe attorney is Toni Messina\u201D</span>' +
+                '<span class="edit-voice-spacer"></span>' +
+                '<button class="btn btn-sm" onclick="cancelEdit()">Cancel</button>' +
+                '<button class="btn btn-sm btn-primary" onclick="saveEdit()">Save</button>' +
+                '</div><div id="ed-voice-out"></div></td></tr>';
         }
 
-        function startEdit(id) { editingId = id; renderEntries(); }
-        function cancelEdit() { editingId = null; renderEntries(); }
+        // ═══════════ VOICE EDITING ═══════════
+        // A second, short-lived recogniser, separate from the 60-second capture used to
+        // create entries. Commands are a sentence, not a dictation.
+        let edRec = null, edTimer = null, edPending = null;
+
+        function toggleEditVoice() {
+            if (edRec) { stopEditVoice(); return; }
+            const sup = speechSupport();
+            if (!sup.ok) {
+                document.getElementById('ed-voice-out').innerHTML =
+                    '<div class="diff" style="border-color:#fde68a;background:var(--wglo)">' +
+                    '<strong>' + esc(sup.title) + '</strong><div style="font-size:12.5px;margin-top:4px">' +
+                    esc(sup.message) + ' You can still edit the fields above by hand.</div></div>';
+                return;
+            }
+            const btn = document.getElementById('ed-mic');
+            const out = document.getElementById('ed-voice-out');
+            let left = 15;
+            btn.classList.add('listening');
+            btn.textContent = '⏹ Listening ' + left + 's';
+            out.innerHTML = '';
+
+            const r = new SR();
+            r.continuous = false; r.interimResults = true; r.lang = speechLang;
+            edRec = r;
+            let heard = '';
+
+            edTimer = setInterval(() => {
+                left--;
+                if (btn) btn.textContent = '⏹ Listening ' + left + 's';
+                if (left <= 0) stopEditVoice();
+            }, 1000);
+
+            r.onresult = e => {
+                const parts = [], interim = [];
+                for (let j = 0; j < e.results.length; j++) {
+                    (e.results[j].isFinal ? parts : interim).push(e.results[j][0].transcript);
+                }
+                const finals = collapseParts(parts);
+                if (finals) heard = finals;
+                const show = joinText(heard, collapseParts(interim));
+                if (show) out.innerHTML = '<div class="heard">“' + esc(show) + '”</div>';
+            };
+            r.onerror = () => { stopEditVoice(); };
+            r.onend = () => {
+                clearInterval(edTimer); edRec = null;
+                resetEditMic();
+                if (heard.trim()) applyHeardEdit(heard.trim());
+                else document.getElementById('ed-voice-out').innerHTML =
+                    '<div class="heard">Nothing was heard. Tap and speak the change, e.g. “change the hours to three”.</div>';
+            };
+            try { r.start(); } catch (_) { stopEditVoice(); }
+        }
+
+        function stopEditVoice() {
+            clearInterval(edTimer);
+            if (edRec) { try { edRec.stop(); } catch (_) { } }
+            resetEditMic();
+        }
+
+        function resetEditMic() {
+            const btn = document.getElementById('ed-mic');
+            if (btn) { btn.classList.remove('listening'); btn.textContent = '🎤 Say a change'; }
+        }
+
+        // Reads the CURRENT form values so the preview compares against what is on screen,
+        // not against what was last saved.
+        function currentEditValues() {
+            const g = id => { const el = document.getElementById(id); return el ? el.value : ''; };
+            const start = g('ed-start'), end = g('ed-end');
+            return {
+                date: g('ed-date'), start, end, hours: hoursBetween(start, end),
+                caseName: g('ed-case'), attorney: g('ed-attorney'), category: g('ed-category'),
+                mode: g('ed-mode'), description: g('ed-desc'), rate: parseFloat(g('ed-rate')) || 0
+            };
+        }
+
+        function fmtEditValue(key, v) {
+            if (key === 'date') return fmtDate(v);
+            if (key === 'start' || key === 'end') return fmt12(v);
+            if (key === 'hours') return Number(v).toFixed(2);
+            if (key === 'rate') return money(v) + '/hr';
+            return String(v);
+        }
+
+        // Shows what would change and waits. Never writes to the row on its own — a
+        // misheard command must not silently alter a billing record.
+        function applyHeardEdit(said) {
+            const { changes } = parseEditCommand(said);
+            const now = currentEditValues();
+            const real = {};
+            Object.keys(changes).forEach(k => {
+                const before = k === 'hours' ? round2(now.hours) : now[k];
+                if (String(changes[k]) !== String(before)) real[k] = changes[k];
+            });
+            edPending = real;
+
+            const out = document.getElementById('ed-voice-out');
+            const heardLine = '<div class="heard">“' + esc(said) + '”</div>';
+
+            if (!Object.keys(real).length) {
+                edPending = null;
+                out.innerHTML = '<div class="diff" style="border-color:#fde68a;background:var(--wglo)">' +
+                    '<strong>No change picked up</strong>' +
+                    '<div style="font-size:12.5px;margin-top:4px">Name the field and the value — ' +
+                    '“change the hours to three”, “the attorney is Toni Messina”, ' +
+                    '“mark it as in court”.</div>' + heardLine + '</div>';
+                return;
+            }
+
+            const rows = Object.keys(real).map(k =>
+                '<div class="diff-row"><b>' + EDIT_LABELS[k] + '</b>' +
+                '<span class="diff-old">' + esc(fmtEditValue(k, k === 'hours' ? now.hours : now[k]) || '—') + '</span>' +
+                '<span>→</span>' +
+                '<span class="diff-new">' + esc(fmtEditValue(k, real[k])) + '</span></div>').join('');
+
+            out.innerHTML = '<div class="diff">' + rows + heardLine +
+                '<div class="suggest-acts">' +
+                '<button class="btn btn-sm btn-primary" onclick="commitHeardEdit()">Apply ' +
+                Object.keys(real).length + ' change' + (Object.keys(real).length === 1 ? '' : 's') + '</button>' +
+                '<button class="btn btn-sm" onclick="discardHeardEdit()">Discard</button>' +
+                '</div></div>';
+        }
+
+        // Writes into the form only. Saving stays a deliberate, separate press.
+        function commitHeardEdit() {
+            if (!edPending) return;
+            const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+            const c = edPending;
+            if (c.date) set('ed-date', c.date);
+            if (c.start) set('ed-start', c.start);
+            if (c.end) set('ed-end', c.end);
+            if (c.hours != null) {
+                // Hours is derived from the range, so move the end time to honour it.
+                const startMin = toMin(document.getElementById('ed-start').value || '09:00');
+                set('ed-end', toHHMM(Math.min(1439, startMin + Math.round(c.hours * 60))));
+            }
+            if (c.caseName) set('ed-case', c.caseName);
+            if (c.attorney) set('ed-attorney', c.attorney);
+            if (c.category) set('ed-category', c.category);
+            if (c.mode) set('ed-mode', c.mode);
+            if (c.rate != null) set('ed-rate', c.rate);
+            if (c.description) set('ed-desc', c.description);
+
+            const n = Object.keys(c).length;
+            edPending = null;
+            document.getElementById('ed-voice-out').innerHTML =
+                '<div class="heard">✓ ' + n + ' change' + (n === 1 ? '' : 's') +
+                ' applied to the fields above. Press Save to keep them.</div>';
+        }
+
+        function discardHeardEdit() {
+            edPending = null;
+            document.getElementById('ed-voice-out').innerHTML = '';
+        }
+
+        function startEdit(id) { editingId = id; stopEditVoice(); edPending = null; renderEntries(); }
+        function cancelEdit() { stopEditVoice(); edPending = null; editingId = null; renderEntries(); }
 
         function saveEdit() {
+            stopEditVoice(); edPending = null;
             const e = entries.find(x => x.id === editingId);
             if (!e) { cancelEdit(); return; }
             const start = document.getElementById('ed-start').value || e.start;

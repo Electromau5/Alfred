@@ -179,6 +179,25 @@ unnoticed — the exact failure fixed in `fcf3653`. Keep it suggest-only. Becaus
 costs one tap and a miss costs a split voucher, the threshold deliberately errs toward
 offering; near-miss surnames (Anderson/Henderson) will be suggested, which is intended.
 
+### Voice editing (`parseEditCommand`, `applyHeardEdit`, `commitHeardEdit`)
+Editing by voice is a **diff, not a re-parse**. `parseEditCommand` scans an utterance for
+field triggers (`EDIT_FIELDS`), takes the text between one trigger and the next as that
+field's value, and returns only the fields actually named — so "change the hours to three"
+cannot disturb the case, attorney or date.
+
+`applyHeardEdit` renders a before → after preview and stops. `commitHeardEdit` writes into
+the **edit-row inputs only**; Save stays a separate deliberate press. Voice never writes to a
+stored entry directly, for the same reason name suggestions don't: a misheard command must
+not silently alter a billing record.
+
+Hours is derived, so an hours change moves the **end time**, never `hours` itself.
+
+When no field is named, a fallback infers one from the utterance's shape — and runs in
+`strict` mode, because loose thresholds there turn conversational filler into edits. Three
+real regressions came from this and are covered by tests: bare `on` as a date cue matched
+"hold **on** a second"; `may\w*` matched "**may**be"; and a loose category threshold matched
+"right then" to *Other*. Keep the fallback strict.
+
 ### Filtering & export (`filteredEntries`, `renderFilterBar`, `exportCSV`)
 Filters live in `filters` and are applied by `filteredEntries()`. `renderFilterBar()` prints
 what is active and how many rows match, and carries the export button, so the filtered export
