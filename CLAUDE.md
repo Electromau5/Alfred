@@ -140,6 +140,21 @@ Two entries conflict when they share a date and their `[start, end)` minute rang
 The modal generates standard affirmation text per trigger, live-updating as you type the
 justification, with a copy-to-clipboard button.
 
+### Filtering & export (`filteredEntries`, `renderFilterBar`, `exportCSV`)
+Filters live in `filters` and are applied by `filteredEntries()`. `renderFilterBar()` prints
+what is active and how many rows match, and carries the export button, so the filtered export
+sits with the controls that produced it rather than below a long table.
+
+`exportCSV` has three modes, and the distinction is deliberate:
+| Call | Exports | Used by |
+|---|---|---|
+| `exportCSV()` | exactly what the Entries tab is showing | filter bar button |
+| `exportCSV(null, true)` via `exportAllCSV()` | every entry, filters ignored | header "Export all" |
+| `exportCSV(caseName)` | that one case's voucher | Vouchers tab cards |
+
+The file is named after its contents (`voucher-gloria-keum-esq-<date>.csv`), so per-attorney
+and per-defendant exports are distinguishable on disk.
+
 ### Entries tab (`renderEntries`, `rowHTML`, `editRowHTML`, `saveEdit`)
 Table with the 10 voucher columns, metrics row (Total Hours, Gross Amount, Billable Entries,
 Overlap Alerts), filters by case/attorney/date range plus a conflicts-only toggle.
@@ -156,9 +171,8 @@ editable rate and cap, affirmation badges, and a per-case CSV export.
   kept and pushed up; cloud seeds from local when cloud is empty)
 
 ### Export / import
-- `exportCSV(caseName?)` — with a case name exports that voucher; without one exports whatever
-  the Entries tab is currently filtered to. UTF-8 BOM for Excel, CRLF line endings, RFC-4180
-  quoting, TOTAL row appended.
+- `exportCSV(caseName?, all?)` — see the table above. UTF-8 BOM for Excel, CRLF line endings,
+  RFC-4180 quoting, TOTAL row appended.
 - `exportJSON()` / `importJSON()` — full backup and merge-by-id restore.
 
 ### Erase all (`openErase`, `doErase`)

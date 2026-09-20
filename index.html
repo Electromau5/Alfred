@@ -678,6 +678,41 @@
             align-items: end;
         }
 
+        #filter-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 16px;
+            padding-top: 14px;
+            border-top: 1px solid var(--bdr);
+        }
+
+        #filter-summary {
+            font-size: 13px;
+            color: var(--dim);
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            flex-wrap: wrap;
+        }
+
+        #filter-summary strong {
+            color: var(--txt);
+            font-weight: 650;
+        }
+
+        #filter-export {
+            white-space: nowrap;
+        }
+
+        @media (max-width: 560px) {
+            #filter-export {
+                width: 100%;
+            }
+        }
+
         .empty {
             text-align: center;
             padding: 46px 20px;
@@ -769,8 +804,8 @@
                 </div>
             </div>
             <div class="hdr-actions">
-                <button class="btn" onclick="exportCSV()" title="Download all filtered entries as a voucher-ready CSV">&#8681;
-                    Export CSV</button>
+                <button class="btn" onclick="exportAllCSV()" title="Download every entry, ignoring any filters">&#8681;
+                    Export all</button>
                 <button class="btn" onclick="exportJSON()" title="Download a full JSON backup">&#8681; Backup</button>
                 <button class="btn" onclick="importJSON()" title="Restore entries from a JSON backup">&#8679;
                     Restore</button>
@@ -895,6 +930,11 @@
                     <input type="checkbox" id="f-conflicts" onchange="onFilterChange()" />
                     Show only entries with time conflicts
                 </label>
+
+                <div id="filter-bar">
+                    <div id="filter-summary"></div>
+                    <button class="btn btn-primary" id="filter-export" onclick="exportCSV()"></button>
+                </div>
             </div>
 
             <div id="entries-body"></div>
@@ -2032,6 +2072,8 @@
             const amount = list.reduce((n, e) => n + e.hours * e.rate, 0);
             const alerts = list.filter(e => bad.has(e.id)).length;
 
+            renderFilterBar(list.length, entries.length);
+
             document.getElementById('metrics').innerHTML =
                 metric('Total hours', hours.toFixed(2)) +
                 metric('Gross amount', money(amount)) +
@@ -2052,9 +2094,35 @@
                 '<div class="tbl-wrap"><table><thead><tr>' +
                 ['Date', 'Time', 'Hours', 'Case', 'Attorney', 'Category', 'Court', 'Description', 'Amount', '']
                     .map(h => '<th>' + h + '</th>').join('') +
-                '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
-                '<div style="display:flex;justify-content:flex-end;margin-top:12px">' +
-                '<button class="btn" onclick="exportCSV()">↓ Export these ' + list.length + ' entries to CSV</button></div>';
+                '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+        }
+
+        // Names every active filter, so it is obvious what an export will contain
+        // before you click it.
+        function activeFilterLabels() {
+            const out = [];
+            if (filters.caseName) out.push('Defendant: ' + filters.caseName);
+            if (filters.attorney) out.push('Attorney: ' + filters.attorney);
+            if (filters.from) out.push('From ' + fmtDate(filters.from));
+            if (filters.to) out.push('To ' + fmtDate(filters.to));
+            if (filters.conflictsOnly) out.push('Conflicts only');
+            return out;
+        }
+
+        function renderFilterBar(shown, total) {
+            const active = activeFilterLabels();
+            document.getElementById('filter-summary').innerHTML = active.length
+                ? '<strong>Showing ' + shown + ' of ' + total + '</strong>' +
+                  active.map(a => '<span class="badge b-cat">' + esc(a) + '</span>').join('')
+                : '<strong>Showing all ' + total + ' ' + (total === 1 ? 'entry' : 'entries') + '</strong>';
+
+            const btn = document.getElementById('filter-export');
+            btn.disabled = shown === 0;
+            btn.textContent = shown === 0
+                ? 'Nothing to export'
+                : (active.length
+                    ? '↓ Export these ' + shown + ' to CSV'
+                    : '↓ Export all ' + shown + ' to CSV');
         }
 
         function metric(k, v, alert) {
@@ -2289,9 +2357,13 @@
             setTimeout(() => URL.revokeObjectURL(url), 1000);
         }
 
-        // caseName omitted → export whatever the Entries tab is currently showing.
-        function exportCSV(caseName) {
-            const list = (caseName ? entries.filter(e => e.caseName === caseName) : filteredEntries())
+        function exportAllCSV() { exportCSV(null, true); }
+
+        // caseName → that case's voucher. all → every entry regardless of filters.
+        // Neither → exactly what the Entries tab is currently showing.
+        function exportCSV(caseName, all) {
+            const list = (caseName ? entries.filter(e => e.caseName === caseName)
+                : (all ? entries.slice() : filteredEntries()))
                 .slice().sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
             if (!list.length) { alert('Nothing to export.'); return; }
             const head = ['Date', 'Start Time', 'End Time', 'Hours', 'Case', 'Attorney', 'Category', 'In/Out Court', 'Description', 'Amount ($)'];
@@ -2304,7 +2376,10 @@
             const totalA = list.reduce((n, e) => n + e.hours * e.rate, 0);
             rows.push(['', '', 'TOTAL', totalH.toFixed(2), '', '', '', '', '', totalA.toFixed(2)]);
             const csv = [head, ...rows].map(r => r.map(csvCell).join(',')).join('\r\n');
-            const slug = (caseName || 'all-cases').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+            // Name the file after what is in it, so per-attorney exports are told apart.
+            const label = caseName || (all ? 'all-entries'
+                : (filters.caseName || filters.attorney || 'all-entries'));
+            const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
             download('voucher-' + slug + '-' + todayISO() + '.csv', 'text/csv;charset=utf-8', '﻿' + csv);
         }
 
