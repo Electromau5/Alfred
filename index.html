@@ -758,13 +758,23 @@
             font-weight: 650;
         }
 
-        #filter-export {
+        #filter-export-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        #filter-export,
+        #filter-export-csv {
             white-space: nowrap;
         }
 
         @media (max-width: 560px) {
-            #filter-export {
+            #filter-export-group {
                 width: 100%;
+            }
+
+            #filter-export {
+                flex: 1;
             }
         }
 
@@ -859,7 +869,7 @@
                 </div>
             </div>
             <div class="hdr-actions">
-                <button class="btn" onclick="exportAllCSV()" title="Download every entry, ignoring any filters">&#8681;
+                <button class="btn" onclick="exportAllCSV()" title="Download every entry as an Excel workbook, ignoring any filters">&#8681;
                     Export all</button>
                 <button class="btn" onclick="exportJSON()" title="Download a full JSON backup">&#8681; Backup</button>
                 <button class="btn" onclick="importJSON()" title="Restore entries from a JSON backup">&#8679;
@@ -992,7 +1002,10 @@
 
                 <div id="filter-bar">
                     <div id="filter-summary"></div>
-                    <button class="btn btn-primary" id="filter-export" onclick="exportCSV()"></button>
+                    <div id="filter-export-group">
+                        <button class="btn btn-primary" id="filter-export" onclick="exportXLSX()"></button>
+                        <button class="btn" id="filter-export-csv" onclick="exportCSV()">CSV</button>
+                    </div>
                 </div>
             </div>
 
@@ -2391,12 +2404,13 @@
                 : '<strong>Showing all ' + total + ' ' + (total === 1 ? 'entry' : 'entries') + '</strong>';
 
             const btn = document.getElementById('filter-export');
-            btn.disabled = shown === 0;
+            const csvBtn = document.getElementById('filter-export-csv');
+            btn.disabled = csvBtn.disabled = shown === 0;
             btn.textContent = shown === 0
                 ? 'Nothing to export'
                 : (active.length
-                    ? '↓ Export these ' + shown + ' to CSV'
-                    : '↓ Export all ' + shown + ' to CSV');
+                    ? '↓ Export these ' + shown + ' to Excel'
+                    : '↓ Export all ' + shown + ' to Excel');
         }
 
         function metric(k, v, alert) {
@@ -2565,7 +2579,8 @@
                 (f.oldest ? ' · oldest ' + fmtDate(f.oldest) + ' (' + f.age + ' days ago)' : '') + '</p></div>' +
                 '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
                 (anyAffirm ? '<button class="btn btn-danger" onclick="openAffirm(\'' + esc(name).replace(/'/g, "&#39;") + '\')">⚑ Affirmations required</button>' : '') +
-                '<button class="btn" onclick="exportCSV(\'' + esc(name).replace(/'/g, "&#39;") + '\')">↓ Export voucher CSV</button>' +
+                '<button class="btn" onclick="exportXLSX(\'' + esc(name).replace(/'/g, "&#39;") + '\')">↓ Export voucher (Excel)</button>' +
+                '<button class="btn" onclick="exportCSV(\'' + esc(name).replace(/'/g, "&#39;") + '\')">CSV</button>' +
                 '</div></div>' +
 
                 '<div class="meter"><span class="' + cls + '" style="width:' + pct.toFixed(1) + '%"></span></div>' +
@@ -2679,8 +2694,235 @@
         }
 
         // ═══════════════ EXPORT / IMPORT ═══════════════
+        // ═══════════ XLSX WRITER ═══════════
+        // An .xlsx is a ZIP of XML parts. Written by hand rather than pulling in a
+        // spreadsheet library, so the app stays one file with no build and no CDN
+        // dependency at export time.
+        let CRC_TABLE = null;
+        function crc32(bytes) {
+            if (!CRC_TABLE) {
+                CRC_TABLE = new Uint32Array(256);
+                for (let i = 0; i < 256; i++) {
+                    let c = i;
+                    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+                    CRC_TABLE[i] = c >>> 0;
+                }
+            }
+            let crc = 0xFFFFFFFF;
+            for (let i = 0; i < bytes.length; i++) crc = CRC_TABLE[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+            return (crc ^ 0xFFFFFFFF) >>> 0;
+        }
+
+        // ZIP with compression method 0 (stored). Valid, and avoids implementing deflate.
+        function zipStore(files) {
+            const enc = new TextEncoder();
+            const u16 = n => [n & 0xff, (n >> 8) & 0xff];
+            const u32 = n => [n & 0xff, (n >> 8) & 0xff, (n >> 16) & 0xff, (n >>> 24) & 0xff];
+            const parts = [], central = [];
+            let offset = 0;
+
+            for (const f of files) {
+                const nameBytes = enc.encode(f.name);
+                const data = enc.encode(f.data);
+                const crc = crc32(data);
+                const header = new Uint8Array([].concat(
+                    u32(0x04034b50), u16(20), u16(0), u16(0), u16(0), u16(0),
+                    u32(crc), u32(data.length), u32(data.length),
+                    u16(nameBytes.length), u16(0)));
+                parts.push(header, nameBytes, data);
+                central.push({ crc, size: data.length, nameBytes, offset });
+                offset += header.length + nameBytes.length + data.length;
+            }
+
+            const cdStart = offset;
+            const cd = [];
+            for (const c of central) {
+                const h = new Uint8Array([].concat(
+                    u32(0x02014b50), u16(20), u16(20), u16(0), u16(0), u16(0), u16(0),
+                    u32(c.crc), u32(c.size), u32(c.size),
+                    u16(c.nameBytes.length), u16(0), u16(0), u16(0), u16(0),
+                    u32(0), u32(c.offset)));
+                cd.push(h, c.nameBytes);
+                offset += h.length + c.nameBytes.length;
+            }
+            const eocd = new Uint8Array([].concat(
+                u32(0x06054b50), u16(0), u16(0),
+                u16(central.length), u16(central.length),
+                u32(offset - cdStart), u32(cdStart), u16(0)));
+
+            return new Blob([...parts, ...cd, eocd],
+                { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        }
+
+        function xmlEsc(v) {
+            return String(v == null ? '' : v)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&apos;')
+                .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '');
+        }
+
+        // Excel counts days from 1899-12-30; a time is the fraction of a day.
+        function excelDate(iso) {
+            const p = String(iso).split('-').map(Number);
+            return Math.round((Date.UTC(p[0], p[1] - 1, p[2]) - Date.UTC(1899, 11, 30)) / 86400000);
+        }
+        function excelTime(hhmm) { return toMin(hhmm) / 1440; }
+
+        const XLSX_COLS = [
+            { head: 'Date', w: 11, kind: 'date' },
+            { head: 'Start Time', w: 11, kind: 'time' },
+            { head: 'End Time', w: 11, kind: 'time' },
+            { head: 'Hours', w: 8, kind: 'num' },
+            { head: 'Case', w: 22, kind: 'text' },
+            { head: 'Attorney', w: 24, kind: 'text' },
+            { head: 'Category', w: 21, kind: 'text' },
+            { head: 'In/Out Court', w: 13, kind: 'text' },
+            { head: 'Description', w: 62, kind: 'wrap' },
+            { head: 'Amount ($)', w: 13, kind: 'money' }
+        ];
+        // cellXfs indices defined in styles.xml below.
+        const XS = { text: 0, head: 1, date: 2, time: 3, num: 4, money: 5, wrap: 6, bold: 7, boldNum: 8, boldMoney: 9 };
+
+        function colLetter(i) { return String.fromCharCode(65 + i); }
+
+        function cellXML(ref, kind, value, styleOverride) {
+            const st = styleOverride != null ? styleOverride : XS[kind === 'wrap' ? 'wrap' : kind];
+            if (value === '' || value == null) return '<c r="' + ref + '" s="' + st + '"/>';
+            if (kind === 'text' || kind === 'wrap' || kind === 'bold') {
+                return '<c r="' + ref + '" s="' + st + '" t="inlineStr"><is><t xml:space="preserve">' +
+                    xmlEsc(value) + '</t></is></c>';
+            }
+            return '<c r="' + ref + '" s="' + st + '"><v>' + value + '</v></c>';
+        }
+
+        function sheetXML(list) {
+            const cols = XLSX_COLS.map((c, i) =>
+                '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + c.w + '" customWidth="1"/>').join('');
+
+            const head = '<row r="1" ht="26" customHeight="1">' + XLSX_COLS.map((c, i) =>
+                cellXML(colLetter(i) + '1', 'bold', c.head, XS.head)).join('') + '</row>';
+
+            const body = list.map((e, n) => {
+                const r = n + 2;
+                const vals = [
+                    ['date', excelDate(e.date)],
+                    ['time', excelTime(e.start)],
+                    ['time', excelTime(e.end)],
+                    ['num', e.hours],
+                    ['text', e.caseName],
+                    ['text', e.attorney],
+                    ['text', e.category],
+                    ['text', e.mode],
+                    ['wrap', e.description],
+                    ['money', round2(e.hours * e.rate)]
+                ];
+                return '<row r="' + r + '">' +
+                    vals.map((v, i) => cellXML(colLetter(i) + r, v[0], v[1])).join('') + '</row>';
+            }).join('');
+
+            // Real SUM formulas, so the totals stay right if rows are edited in Excel.
+            const last = list.length + 1, tr = list.length + 2;
+            const sum = col => '<c r="' + col + tr + '" s="' + (col === 'J' ? XS.boldMoney : XS.boldNum) +
+                '"><f>SUM(' + col + '2:' + col + last + ')</f><v>' +
+                round2(list.reduce((a, e) => a + (col === 'J' ? e.hours * e.rate : e.hours), 0)) + '</v></c>';
+            const total = '<row r="' + tr + '">' +
+                '<c r="A' + tr + '" s="' + XS.bold + '"/><c r="B' + tr + '" s="' + XS.bold + '"/>' +
+                cellXML('C' + tr, 'bold', 'TOTAL') + sum('D') +
+                ['E', 'F', 'G', 'H', 'I'].map(c => '<c r="' + c + tr + '" s="' + XS.bold + '"/>').join('') +
+                sum('J') + '</row>';
+
+            return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+                '<sheetPr><outlinePr summaryBelow="1"/></sheetPr>' +
+                '<cols>' + cols + '</cols><sheetData>' + head + body + total + '</sheetData>' +
+                '<autoFilter ref="A1:' + colLetter(XLSX_COLS.length - 1) + last + '"/>' +
+                '</worksheet>';
+        }
+
+        const XLSX_STYLES = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+            '<numFmts count="4">' +
+            '<numFmt numFmtId="164" formatCode="&quot;$&quot;#,##0.00"/>' +
+            '<numFmt numFmtId="165" formatCode="mm/dd/yyyy"/>' +
+            '<numFmt numFmtId="166" formatCode="0.00"/>' +
+            '<numFmt numFmtId="167" formatCode="h:mm\\ AM/PM"/>' +
+            '</numFmts>' +
+            '<fonts count="2">' +
+            '<font><sz val="11"/><color rgb="FF0F172A"/><name val="Calibri"/></font>' +
+            '<font><b/><sz val="11"/><color rgb="FF0F172A"/><name val="Calibri"/></font>' +
+            '</fonts>' +
+            '<fills count="3">' +
+            '<fill><patternFill patternType="none"/></fill>' +
+            '<fill><patternFill patternType="gray125"/></fill>' +
+            '<fill><patternFill patternType="solid"><fgColor rgb="FFF1F5F9"/><bgColor indexed="64"/></patternFill></fill>' +
+            '</fills>' +
+            '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>' +
+            '<border><left/><right/><top/><bottom style="thin"><color rgb="FFCBD5E1"/></bottom><diagonal/></border>' +
+            '</borders>' +
+            '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+            '<cellXfs count="10">' +
+            '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="top"/></xf>' +
+            '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>' +
+            '<xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment vertical="top"/></xf>' +
+            '<xf numFmtId="167" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment vertical="top"/></xf>' +
+            '<xf numFmtId="166" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment vertical="top"/></xf>' +
+            '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment vertical="top"/></xf>' +
+            '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>' +
+            '<xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/>' +
+            '<xf numFmtId="166" fontId="1" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyBorder="1"/>' +
+            '<xf numFmtId="164" fontId="1" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyBorder="1"/>' +
+            '</cellXfs>' +
+            '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
+            '</styleSheet>';
+
+        function sheetNameFor(label) {
+            const clean = String(label || 'Entries').replace(/[\[\]:*?\/\\]/g, ' ').trim().slice(0, 31);
+            return clean || 'Entries';
+        }
+
+        function xlsxBlob(list, tabName) {
+            const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+            return zipStore([
+                {
+                    name: '[Content_Types].xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+                        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+                        '<Default Extension="xml" ContentType="application/xml"/>' +
+                        '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+                        '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+                        '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+                        '</Types>'
+                },
+                {
+                    name: '_rels/.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+                        '<Relationship Id="rId1" Type="' + REL + '/officeDocument" Target="xl/workbook.xml"/>' +
+                        '</Relationships>'
+                },
+                {
+                    name: 'xl/workbook.xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="' + REL + '">' +
+                        '<sheets><sheet name="' + xmlEsc(sheetNameFor(tabName)) + '" sheetId="1" r:id="rId1"/></sheets>' +
+                        '</workbook>'
+                },
+                {
+                    name: 'xl/_rels/workbook.xml.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+                        '<Relationship Id="rId1" Type="' + REL + '/worksheet" Target="worksheets/sheet1.xml"/>' +
+                        '<Relationship Id="rId2" Type="' + REL + '/styles" Target="styles.xml"/>' +
+                        '</Relationships>'
+                },
+                { name: 'xl/styles.xml', data: XLSX_STYLES },
+                { name: 'xl/worksheets/sheet1.xml', data: sheetXML(list) }
+            ]);
+        }
+
         function csvCell(v) {
-            const s = String(v == null ? '' : v);
+            let s = String(v == null ? '' : v);
+            // Excel evaluates a cell beginning = + - @ as a formula, so a narrative like
+            // "-2 hours adjustment" opens as an error. Mark those as text. Genuine numbers
+            // are left alone so the numeric columns still add up.
+            if (/^[=+\-@\t\r]/.test(s) && !/^-?\d+(\.\d+)?$/.test(s)) s = "'" + s;
             return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
         }
 
@@ -2692,7 +2934,27 @@
             setTimeout(() => URL.revokeObjectURL(url), 1000);
         }
 
-        function exportAllCSV() { exportCSV(null, true); }
+        function exportAllCSV() { exportXLSX(null, true); }
+
+        // Same selection rules as exportCSV: one case, everything, or the current view.
+        function exportXLSX(caseName, all) {
+            const list = (caseName ? entries.filter(e => e.caseName === caseName)
+                : (all ? entries.slice() : filteredEntries()))
+                .slice().sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+            if (!list.length) { alert('Nothing to export.'); return; }
+            const label = caseName || (all ? 'all-entries'
+                : (filters.caseName || filters.attorney || 'all-entries'));
+            const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+            downloadBlob('voucher-' + slug + '-' + todayISO() + '.xlsx', xlsxBlob(list, label));
+        }
+
+        function downloadBlob(name, blob) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = name;
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }
 
         // caseName → that case's voucher. all → every entry regardless of filters.
         // Neither → exactly what the Entries tab is currently showing.

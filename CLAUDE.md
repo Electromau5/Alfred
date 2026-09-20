@@ -183,6 +183,21 @@ Filters live in `filters` and are applied by `filteredEntries()`. `renderFilterB
 what is active and how many rows match, and carries the export button, so the filtered export
 sits with the controls that produced it rather than below a long table.
 
+Every export exists in two formats. `exportXLSX(caseName?, all?)` mirrors `exportCSV`'s
+selection rules exactly; only the file format differs.
+
+**The .xlsx is written by hand** (`zipStore`, `sheetXML`, `XLSX_STYLES`) rather than via a
+spreadsheet library, keeping the app one file with no build and no CDN dependency at export
+time. An xlsx is a ZIP of XML parts; entries are stored uncompressed (ZIP method 0) so no
+deflate implementation is needed, with a real CRC32 per entry. Dates are serials from
+1899-12-30, times are fractions of a day, and the TOTAL row uses live `SUM()` formulas with
+cached values so it stays correct if rows are edited in Excel. Validated by CRC check,
+XML well-formedness, and rendering through macOS Quick Look.
+
+The xlsx is also the safer format: text cells are `inlineStr`, so a narrative beginning with
+`=` is never evaluated. In CSV that had to be guarded explicitly in `csvCell`, which prefixes
+an apostrophe to values starting `= + - @` while leaving genuine numbers alone.
+
 `exportCSV` has three modes, and the distinction is deliberate:
 | Call | Exports | Used by |
 |---|---|---|
