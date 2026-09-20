@@ -1239,6 +1239,17 @@
                 return isoOf(d);
             }
 
+            // Day-before-month, the way people usually say a date out loud:
+            // "25th of December 2025", "3 March", "the 14th of Jan".
+            m = low.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?(?:,?\s*(\d{4}))?\b/);
+            if (m) {
+                const now = new Date();
+                const y = m[3] ? +m[3] : now.getFullYear();
+                const d = new Date(y, MONTHS[m[2]], +m[1]);
+                if (!m[3] && d > now) d.setFullYear(y - 1);
+                return isoOf(d);
+            }
+
             m = low.match(/\b(?:last|on|this past)\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/)
                 || low.match(/\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/);
             if (m) {
@@ -1310,6 +1321,48 @@
             return { start: toHHMM(s), end: toHHMM(Math.min(1439, e)) };
         }
 
+        // Every explicit clock reference in the text, in order. A time counts only when
+        // it carries a meridiem ("3 p.m.") or a colon ("15:00"), so bare quantities like
+        // "1.5 hrs" and "45 minutes" are never mistaken for times.
+        const CLOCK_RE = /\b(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)(?![a-z])|\b(\d{1,2}):(\d{2})\b/gi;
+        function findClockTimes(low) {
+            const out = [];
+            let m;
+            CLOCK_RE.lastIndex = 0;
+            while ((m = CLOCK_RE.exec(low)) !== null) {
+                out.push(m[1] !== undefined
+                    ? clockToMin(m[1], m[2], m[3])
+                    : clockToMin(m[4], m[5], null));
+            }
+            return out;
+        }
+
+        // Resolve a start/end pair from whatever the text offers, in order of confidence.
+        // Returns null when there is no clock reference at all, leaving the caller to
+        // anchor the block by duration.
+        function resolveTimes(low) {
+            const range = parseTimeRange(low);
+            if (range) return range;
+
+            const dur = parseDuration(low);
+            const times = findClockTimes(low);
+
+            // Two or more clock references and no "to" between them, e.g.
+            // "start time 3:00 p.m. ... time 8:00 p.m." Treat the first as the start and
+            // the last as the end.
+            if (times.length >= 2) {
+                const s = times[0];
+                let e = times[times.length - 1];
+                if (e <= s) e = Math.min(1439, s + (dur || 60));
+                return { start: toHHMM(s), end: toHHMM(e) };
+            }
+            if (times.length === 1) {
+                const s = times[0];
+                return { start: toHHMM(s), end: toHHMM(Math.min(1439, s + (dur || 60))) };
+            }
+            return null;
+        }
+
         function parseStartTime(low) {
             const m = low.match(/\b(?:at|starting at|start(?:ed|ing)? at|beginning at|from)\s+(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)?/i);
             if (!m) return null;
@@ -1325,7 +1378,20 @@
             return best || 'Other';
         }
 
-        // Match a known name loosely: full name, or any distinctive word from it.
+        // Words that appear constantly in dictation and therefore must never, on their
+        // own, identify a known case or attorney. Without this, a saved case called
+        // "Defendant Martin" matched every later entry containing the word "defendant",
+        // silently billing new work to the wrong case.
+        const GENERIC_NAME_WORDS = new Set(['defendant', 'case', 'cases', 'matter', 'client',
+            'docket', 'file', 'files', 'attorney', 'counsel', 'lawyer', 'esq', 'court', 'hearing',
+            'trial', 'report', 'review', 'discovery', 'call', 'phone', 'conference', 'meeting',
+            'start', 'started', 'begin', 'begins', 'time', 'date', 'name', 'named', 'new', 'today',
+            'yesterday', 'hour', 'hours', 'minute', 'minutes', 'testimony', 'extraction', 'analysis',
+            'download', 'writing', 'travel', 'other', 'with', 'from', 'about', 'regarding']);
+
+        // Match a known name: the full name anywhere in the text, or a distinctive word
+        // from it. "Zimbler" still resolves to "Douglas Zimbler"; "defendant" resolves to
+        // nothing.
         function knownMatch(list, text) {
             const low = text.toLowerCase();
             for (const name of list) {
@@ -1333,10 +1399,24 @@
                 if (clean && low.includes(clean.toLowerCase())) return name;
             }
             for (const name of list) {
-                const parts = name.replace(/,?\s*esq\.?/ig, '').split(/[\s,]+/).filter(p => p.length >= 4);
+                const parts = name.replace(/,?\s*esq\.?/ig, '').split(/[\s,]+/)
+                    .filter(p => p.length >= 4 && !GENERIC_NAME_WORDS.has(p.toLowerCase()));
                 if (parts.some(p => new RegExp('\\b' + reEsc(p) + '\\b', 'i').test(low))) return name;
             }
             return '';
+        }
+
+        // A two-word capture readily swallows the next preposition: "defendant Martin with
+        // attorney ..." yields "Martin With". Trim filler off both ends of a captured name.
+        function cleanName(str) {
+            const words = String(str || '').trim().split(/\s+/).filter(Boolean);
+            const junk = w => {
+                const k = w.toLowerCase().replace(/[^a-z']/g, '');
+                return !k || STOPWORDS.has(k) || GENERIC_NAME_WORDS.has(k);
+            };
+            while (words.length > 1 && junk(words[words.length - 1])) words.pop();
+            while (words.length > 1 && junk(words[0])) words.shift();
+            return words.join(' ');
         }
 
         function parseAttorney(text) {
@@ -1344,13 +1424,13 @@
             if (known) return known;
 
             let m = text.match(/\b([A-Z][A-Za-z'\u2019-]+(?:\s+[A-Z][A-Za-z'\u2019-]+)?)\s*,?\s*Esq\.?/);
-            if (m) return m[1] + ', Esq.';
+            if (m) return cleanName(m[1]) + ', Esq.';
 
             m = text.match(/\b(?:attorney|counsel|lawyer|a\.?d\.?a\.?|defender)\s+([A-Za-z][A-Za-z'\u2019-]+(?:\s+[A-Z][A-Za-z'\u2019-]+)?)/i);
-            if (m && !STOPWORDS.has(m[1].split(/\s+/)[0].toLowerCase())) return toTitle(m[1]);
+            if (m && !STOPWORDS.has(m[1].split(/\s+/)[0].toLowerCase())) return cleanName(toTitle(m[1]));
 
             m = text.match(/\bwith\s+([A-Z][A-Za-z'\u2019-]+(?:\s+[A-Z][A-Za-z'\u2019-]+)?)/);
-            if (m && !STOPWORDS.has(m[1].split(/\s+/)[0].toLowerCase())) return m[1];
+            if (m && !STOPWORDS.has(m[1].split(/\s+/)[0].toLowerCase())) return cleanName(m[1]);
 
             return '';
         }
@@ -1368,13 +1448,24 @@
             if (known) return known;
 
             let m = t.match(/\b(?:the\s+)?([A-Z][A-Za-z'\u2019-]+(?:\s+[A-Z][A-Za-z'\u2019-]+){0,2})\s+(?:case|matter|file|docket)\b/);
-            if (m) return m[1];
+            if (m) return cleanName(m[1]);
 
-            m = t.match(/\b(?:case|matter|defendant|client|docket)\s+(?:of\s+|named\s+|for\s+)?([A-Za-z][A-Za-z'\u2019-]+(?:\s+[A-Za-z][A-Za-z'\u2019-]+)?)/i);
-            if (m && !STOPWORDS.has(m[1].split(/\s+/)[0].toLowerCase())) return toTitle(m[1]);
+            // Scan every marker word rather than only the first. "new case defendant Smith"
+            // has "case" first, whose capture is just the word "defendant"; the scan has to
+            // step past that to reach the actual name.
+            const markerRe = /\b(?:case|matter|defendant|client|docket)\s+(?:of\s+|named\s+|for\s+)?([A-Za-z][A-Za-z'\u2019-]+(?:\s+[A-Za-z][A-Za-z'\u2019-]+)?)/gi;
+            let mm;
+            while ((mm = markerRe.exec(t)) !== null) {
+                const first = mm[1].split(/\s+/)[0].toLowerCase();
+                if (STOPWORDS.has(first) || GENERIC_NAME_WORDS.has(first)) {
+                    markerRe.lastIndex = mm.index + 1;   // resume inside, to reach the name
+                    continue;
+                }
+                return cleanName(toTitle(mm[1]));
+            }
 
             m = t.match(/\b(?:for|on|re:?|regarding|about|in)\s+(?:the\s+)?([A-Z][A-Za-z'\u2019-]+\s+[A-Z][A-Za-z'\u2019-]+)/);
-            if (m) return m[1];
+            if (m) return cleanName(m[1]);
 
             m = t.match(/\b(?:for|on|re:?|regarding|about)\s+(?:the\s+)?([A-Z][A-Za-z'\u2019-]{2,})\b/);
             if (m && !STOPWORDS.has(m[1].toLowerCase())) return m[1];
@@ -1401,17 +1492,12 @@
             const low = ' ' + raw.toLowerCase().replace(/\s+/g, ' ') + ' ';
 
             const date = parseDate(low);
-            const range = parseTimeRange(low);
             const dur = parseDuration(low);
-            const startAt = parseStartTime(low);
+            const resolved = resolveTimes(low);
 
             let start, end;
-            if (range) {
-                start = range.start; end = range.end;
-            } else if (startAt != null) {
-                const d = dur || 60;
-                start = toHHMM(startAt);
-                end = toHHMM(Math.min(1439, startAt + d));
+            if (resolved) {
+                start = resolved.start; end = resolved.end;
             } else {
                 const d = dur || 60;
                 // No clock reference: anchor the block so it ENDS at "now" for today,

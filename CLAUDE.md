@@ -108,7 +108,18 @@ Turns free text into a draft entry. Never throws; unknown fields come back empty
 user to fill in. Sub-parsers: `parseDate`, `parseDuration`, `parseTimeRange`, `parseStartTime`,
 `parseCategory`, `parseAttorney`, `parseCase`, `buildNarrative`.
 - Known case/attorney names win over regex guesses (`knownMatch` does full-name then
-  distinctive-word matching, so "Zimbler" resolves to "Douglas Zimbler")
+  distinctive-word matching, so "Zimbler" resolves to "Douglas Zimbler"). The word-level
+  pass filters through `GENERIC_NAME_WORDS` first — **without it a saved case named
+  "Defendant Martin" matched every later entry containing the word "defendant"**, silently
+  billing new work to the wrong case. Never let a generic term identify a case on its own.
+- `cleanName()` trims filler off both ends of a captured name, since a two-word capture
+  readily swallows the next preposition ("defendant Martin with ..." → "Martin With")
+- `resolveTimes()` resolves start/end in order of confidence: explicit "X to Y" range, then
+  two loose clock references (`"start time 3 p.m. ... time 8 p.m."` → 15:00–20:00), then a
+  single clock plus duration. `findClockTimes` counts a number as a time only when it has a
+  meridiem or a colon, so "1.5 hrs", "45 minutes" and years are never read as clock times.
+- `parseDate` handles both "December 25" and the way people actually speak it,
+  "25th of December 2025"
 - The attorney is parsed first and blanked out of the text before case matching, so
   "with attorney Gloria" can't be mistaken for the case name
 - `STOPWORDS` guards against capturing filler after a marker word ("attorney regarding …")
