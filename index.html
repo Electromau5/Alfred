@@ -156,6 +156,12 @@
             background: var(--rglo);
         }
 
+        a.btn {
+            display: inline-block;
+            text-decoration: none;
+            line-height: normal;
+        }
+
         .btn:disabled,
         .btn:disabled:hover {
             opacity: .45;
@@ -696,6 +702,52 @@
             }
         }
 
+        #sync-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 5px;
+            padding: 3px 9px;
+            border-radius: 20px;
+            font-size: 11.5px;
+            font-weight: 600;
+            border: 1px solid var(--bdr);
+            background: var(--surf);
+            color: var(--dim);
+        }
+
+        #sync-pill::before {
+            content: "";
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        #sync-pill.ok {
+            color: var(--ok);
+            border-color: #a7f3d0;
+            background: var(--oglo);
+        }
+
+        #sync-pill.bad {
+            color: var(--red);
+            border-color: #fecaca;
+            background: var(--rglo);
+        }
+
+        #sync-pill.warn {
+            color: var(--warn);
+            border-color: #fde68a;
+            background: var(--wglo);
+        }
+
+        #sync-pill.busy {
+            color: var(--accent);
+            border-color: #bfdbfe;
+            background: var(--aglo);
+        }
+
         #lang-row {
             display: flex;
             align-items: center;
@@ -866,6 +918,7 @@
                 <div>
                     <h1>Alfred</h1>
                     <p id="hdr-sub">Voucher time tracker</p>
+                    <button id="sync-pill" onclick="openSyncInfo()"></button>
                 </div>
             </div>
             <div class="hdr-actions">
@@ -885,6 +938,8 @@
             <button id="tab-entries" onclick="switchTab('entries')">&#128203; Entries</button>
             <button id="tab-vouchers" onclick="switchTab('vouchers')">&#9878; Vouchers</button>
         </nav>
+
+        <div id="sync-banner"></div>
 
         <div id="demo-banner" class="banner banner-info hidden">
             <div class="ico">&#8505;</div>
@@ -1089,6 +1144,11 @@
         const ENTRIES_TABLE = 'alfred_time_entries';
         const CASES_TABLE = 'alfred_cases';
         let syncTimer = null;
+        // Sync used to fail in silence. It now has a visible state at all times:
+        // off | syncing | ok | setup (tables missing) | error
+        let syncState = cloudEnabled ? 'syncing' : 'off';
+        let syncDetail = '';
+        let lastSyncAt = null;
 
         // ── Billing defaults ──
         const DEFAULT_RATE = 250;     // $/hr
@@ -1110,6 +1170,38 @@
             ['en-NZ', 'English (New Zealand)'], ['en-ZA', 'English (South Africa)']
         ];
         const NAME_MATCH_THRESHOLD = 0.72;   // suggest an existing name at or above this
+
+        // Mirrors schema.sql, which stays the canonical copy. Kept here so the tables can
+        // be created from the phone, without needing the repo checked out.
+        const SETUP_SQL = [
+            'create table if not exists public.alfred_time_entries (',
+            '  id text primary key, entry_date date, start_time text, end_time text,',
+            '  hours numeric default 0, case_name text default \'\', attorney text default \'\',',
+            '  category text default \'\', mode text default \'Out-of-Court\',',
+            '  description text default \'\', rate numeric default 250,',
+            '  raw_text text default \'\', created_at timestamptz default now());',
+            '',
+            'create index if not exists alfred_time_entries_date_idx on public.alfred_time_entries (entry_date);',
+            'create index if not exists alfred_time_entries_case_idx on public.alfred_time_entries (case_name);',
+            '',
+            'create table if not exists public.alfred_cases (',
+            '  name text primary key, attorney text default \'\', rate numeric default 250,',
+            '  cap numeric default 3000, created_at timestamptz default now());',
+            '',
+            'alter table public.alfred_time_entries enable row level security;',
+            'alter table public.alfred_cases enable row level security;',
+            '',
+            'drop policy if exists "public alfred time entries" on public.alfred_time_entries;',
+            'create policy "public alfred time entries" on public.alfred_time_entries',
+            '  for all to anon, authenticated using (true) with check (true);',
+            '',
+            'drop policy if exists "public alfred cases" on public.alfred_cases;',
+            'create policy "public alfred cases" on public.alfred_cases',
+            '  for all to anon, authenticated using (true) with check (true);'
+        ].join('\n');
+
+        const SUPABASE_SQL_URL = 'https://supabase.com/dashboard/project/' +
+            (SUPABASE_URL.match(/https:\/\/([^.]+)\./) || [, ''])[1] + '/sql/new';
 
         // The attorneys actually worked with. Seeding these means dictation can match a
         // name on the very first entry, before any history exists, and they are selectable
@@ -1246,32 +1338,58 @@
             clearTimeout(syncTimer);
             syncTimer = setTimeout(syncToCloud, 800);
         }
+        // Distinguishes "tables are missing" from a transient network failure, because the
+        // fixes are completely different.
+        function isMissingTable(err) {
+            const m = ((err && (err.message || err.msg)) || '') + ' ' + ((err && err.code) || '');
+            return /could not find the table|does not exist|PGRST205|PGRST202|42P01/i.test(m);
+        }
+
+        function setSyncState(state, detail) {
+            syncState = state;
+            syncDetail = detail || '';
+            if (state === 'ok') lastSyncAt = new Date();
+            renderSyncStatus();
+        }
+
         async function syncToCloud() {
             if (!sb) return;
+            setSyncState('syncing');
             try {
                 const rows = entries.map(entryToRow);
-                if (rows.length) await sb.from(ENTRIES_TABLE).upsert(rows, { onConflict: 'id' });
+                if (rows.length) {
+                    const up = await sb.from(ENTRIES_TABLE).upsert(rows, { onConflict: 'id' });
+                    if (up.error) throw up.error;
+                }
                 let del = sb.from(ENTRIES_TABLE).delete();
                 del = entries.length
                     ? del.not('id', 'in', '(' + entries.map(e => '"' + e.id + '"').join(',') + ')')
                     : del.neq('id', '');
-                await del;
+                const dr = await del;
+                if (dr.error) throw dr.error;
 
                 if (caseBook.length) {
-                    await sb.from(CASES_TABLE).upsert(
+                    const cr = await sb.from(CASES_TABLE).upsert(
                         caseBook.map(c => ({ name: c.name, attorney: c.attorney || '', rate: c.rate, cap: c.cap })),
                         { onConflict: 'name' });
+                    if (cr.error) throw cr.error;
                 }
-            } catch (err) { console.error('Cloud sync failed:', err); }
+                setSyncState('ok');
+            } catch (err) {
+                console.error('Cloud sync failed:', err);
+                setSyncState(isMissingTable(err) ? 'setup' : 'error', (err && err.message) || String(err));
+            }
         }
         async function loadFromCloud() {
             if (!sb) return;
+            setSyncState('syncing');
             try {
                 const [er, cr] = await Promise.all([
                     sb.from(ENTRIES_TABLE).select('*').order('entry_date', { ascending: false }),
                     sb.from(CASES_TABLE).select('*')
                 ]);
-                if (!er.error) {
+                if (er.error) throw er.error;
+                {
                     const cloud = (er.data || []).map(rowToEntry);
                     if (cloud.length === 0 && entries.length > 0) {
                         await syncToCloud();
@@ -1297,7 +1415,17 @@
                 localStorage.setItem('alfred-entries', JSON.stringify(entries));
                 localStorage.setItem('alfred-cases', JSON.stringify(caseBook));
                 renderAll();
-            } catch (err) { console.error('Cloud load failed:', err); }
+                setSyncState('ok');
+            } catch (err) {
+                console.error('Cloud load failed:', err);
+                setSyncState(isMissingTable(err) ? 'setup' : 'error', (err && err.message) || String(err));
+            }
+        }
+
+        async function retrySync() {
+            if (!sb) return;
+            await loadFromCloud();
+            if (syncState === 'ok') await syncToCloud();
         }
 
         function sortEntries() {
@@ -2260,6 +2388,68 @@
         }
 
         // ═══════════════ TABS & RENDER ═══════════════
+        const SYNC_LABELS = {
+            off: ['', 'Local only'],
+            syncing: ['busy', 'Syncing\u2026'],
+            ok: ['ok', 'Synced to cloud'],
+            setup: ['warn', 'Cloud not set up'],
+            error: ['bad', 'Sync failed']
+        };
+
+        function renderSyncStatus() {
+            const pill = document.getElementById('sync-pill');
+            if (pill) {
+                const [cls, label] = SYNC_LABELS[syncState] || SYNC_LABELS.off;
+                pill.className = cls;
+                pill.textContent = syncState === 'ok' && lastSyncAt
+                    ? 'Synced ' + lastSyncAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+                    : label;
+            }
+
+            const box = document.getElementById('sync-banner');
+            if (!box) return;
+            if (syncState === 'setup') {
+                box.innerHTML = '<div class="banner banner-warn"><div class="ico">\u26A0</div><div class="body">' +
+                    '<strong>Entries are only on this device</strong>' +
+                    'The cloud database tables have not been created yet, so nothing syncs and other ' +
+                    'devices see nothing. It takes about a minute: open the Supabase SQL editor, paste ' +
+                    'the setup SQL, press Run, then come back and retry.' +
+                    '<div class="suggest-acts">' +
+                    '<button class="btn btn-sm btn-primary" onclick="copySetupSQL(this)">Copy setup SQL</button>' +
+                    '<a class="btn btn-sm" target="_blank" rel="noopener" href="' + SUPABASE_SQL_URL + '">Open SQL editor</a>' +
+                    '<button class="btn btn-sm" onclick="retrySync()">Retry</button>' +
+                    '</div></div></div>';
+            } else if (syncState === 'error') {
+                box.innerHTML = '<div class="banner banner-red"><div class="ico">\u26A0</div><div class="body">' +
+                    '<strong>Cloud sync failed \u2014 this device is up to date, others are not</strong>' +
+                    esc(syncDetail || 'Unknown error') + '. Your entries are safe here and will upload once ' +
+                    'the connection works.' +
+                    '<div class="suggest-acts"><button class="btn btn-sm" onclick="retrySync()">Retry now</button></div>' +
+                    '</div></div>';
+            } else {
+                box.innerHTML = '';
+            }
+        }
+
+        function copySetupSQL(btn) {
+            navigator.clipboard.writeText(SETUP_SQL).then(() => {
+                btn.textContent = 'Copied \u2713';
+                setTimeout(() => { btn.textContent = 'Copy setup SQL'; }, 2000);
+            }).catch(() => alert(SETUP_SQL));
+        }
+
+        function openSyncInfo() {
+            if (syncState === 'ok') {
+                alert('Entries sync to the cloud database.\n\nLast sync: ' +
+                    (lastSyncAt ? lastSyncAt.toLocaleString() : 'just now') +
+                    '\n\nOpening Alfred on another device shows the same entries.');
+            } else if (syncState === 'off') {
+                alert('Cloud sync is not configured, so entries are saved on this device only.');
+            } else {
+                retrySync();
+            }
+        }
+
         function setSpeechLang(v) {
             speechLang = v;
             try { localStorage.setItem('alfred-speech-lang', v); } catch (_) { }
@@ -3181,6 +3371,7 @@
         async function initApp() {
             renderChips();
             buildLangPicker();
+            renderSyncStatus();
             sortEntries();
             renderAll();
             applySpeechSupport();

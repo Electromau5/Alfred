@@ -44,7 +44,8 @@ unsaved billable time.
 RLS is enabled but fully permissive (`using (true)`). Safe for a personal cross-device tool
 with no login requirement.
 
-**First-time DB setup** — run `schema.sql` once in the Supabase SQL Editor. It uses
+**First-time DB setup** — run `schema.sql` once in the Supabase SQL Editor. `SETUP_SQL` in
+`index.html` mirrors it so the tables can be created from a phone; keep the two in step. It uses
 `create table if not exists`, so it is safe to re-run and never drops billing data. It leaves
 the retired memo table `public.alfred_notes` alone (drop statement is commented out).
 
@@ -251,7 +252,13 @@ Zimbler always demonstrates all three affirmation triggers.
 - **No module system** — all functions are global, wired via inline `onclick` / `oninput`.
 - **`renderAll()` is the render loop** — call it after any state change that affects display;
   `renderEntries()` / `renderVouchers()` repaint a single tab.
-- **Cloud sync is fire-and-forget** — errors are logged to console but never surfaced.
+- **Sync failure is always visible.** It used to be fire-and-forget, logged only to the
+  console — the tables were never created in the live project and nobody could tell, so every
+  entry stayed on one device. `setSyncState()` drives a pill under the title
+  (`off | syncing | ok | setup | error`) and a banner. `isMissingTable()` separates "tables
+  don't exist" (fixable with the embedded SQL, banner offers copy + a deep link to this
+  project's SQL editor) from a transient network failure (retry). Never make a sync path
+  swallow an error again.
 - **Speech availability is three-valued, not a boolean** — see `speechSupport()`. Dictation needs
   *both* a secure context and a real engine:
   - **Not HTTPS** → Chrome exposes the constructor but refuses to start, so the button looks dead.
