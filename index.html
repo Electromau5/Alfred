@@ -2174,6 +2174,22 @@
             const orig = ' ' + String(text || '').trim().replace(/\s+/g, ' ') + ' ';
             const low = orig.toLowerCase();
 
+            // A description is free text and will naturally contain words that are field
+            // triggers elsewhere — "called the attorney about the case for two hours".
+            // So when the utterance OPENS by naming the description (within the first five
+            // words), everything after it is the new description and no other trigger is
+            // considered. Later mentions keep the ordinary trigger behaviour.
+            const words = orig.trim().split(/\s+/).filter(Boolean);
+            const bare = w => w.toLowerCase().replace(/[^a-z]/g, '');
+            const dIdx = words.slice(0, 5).findIndex(w => /^(?:descriptions?|narratives?|notes?|wording)$/.test(bare(w)));
+            if (dIdx !== -1) {
+                const rest = words.slice(dIdx + 1).join(' ')
+                    .replace(/^\s*(?:to|is|as|was|should\s+(?:be|say|read)|now\s+(?:says?|reads?)|says?|reads?|=|:)\s+/i, '')
+                    .trim();
+                const v = editFieldValue('description', rest, 'description');
+                if (v) return { changes: { description: v }, heard: orig.trim() };
+            }
+
             const hits = [];
             EDIT_FIELDS.forEach(f => {
                 const re = new RegExp(f.re.source, 'gi');
@@ -2199,9 +2215,12 @@
                 // in court" reads the attorney as "Toni Messina And Mark It As".
                 if (next) cleaned = stripTrailingConnective(cleaned);
                 let v = editFieldValue(h.key, cleaned, h.word);
-                if (v === null || v === undefined || v === '') {
-                    // Some phrasings put the value first — "make it two and a half hours",
-                    // "9am start". Fall back to the text preceding the trigger.
+                // Only numeric and time fields are ever spoken value-first ("two and a
+                // half hours", "9am start"). For names, categories and the description the
+                // value always follows the label, and looking backwards there just grabs
+                // the command verb — "update the description" became "Update the".
+                const VALUE_MAY_PRECEDE = ['hours', 'start', 'end', 'rate'];
+                if ((v === null || v === undefined || v === '') && VALUE_MAY_PRECEDE.indexOf(h.key) !== -1) {
                     const prev = ordered[i - 1];
                     const before = orig.slice(prev ? prev.end : 0, h.start)
                         .replace(/^\s*(?:to|is|as|was|=|:)\s+/i, '').trim();

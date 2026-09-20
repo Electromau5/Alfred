@@ -191,6 +191,16 @@ field triggers (`EDIT_FIELDS`), takes the text between one trigger and the next 
 field's value, and returns only the fields actually named — so "change the hours to three"
 cannot disturb the case, attorney or date.
 
+**A description named in the first five words claims the whole rest of the utterance**, and
+no other trigger is considered. Descriptions are free text and routinely contain field words
+— "spoke with the attorney about the case for two hours" would otherwise truncate at
+*attorney* and fire three spurious changes. A later mention keeps ordinary trigger behaviour.
+
+The value-precedes-label fallback is restricted to `hours`, `start`, `end` and `rate`. Only
+those are spoken value-first ("two and a half hours"); for names and the description the
+value always follows, and looking backwards just grabs the command verb — "update the
+description" became "Update the".
+
 A two-minute window means commands get **chained**, which the slicer has to handle:
 the words joining two clauses belong to the *following* one (`stripTrailingConnective`), or
 "the attorney to Toni Messina and mark it as in court" reads the attorney as
