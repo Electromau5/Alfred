@@ -4,8 +4,9 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Alfred</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
+    <title>Alfred — Voucher Time Tracker</title>
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#9878;</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
     <style>
         *,
@@ -17,179 +18,733 @@
         }
 
         :root {
-            --bg: #0c0c13;
-            --surf: #14141e;
-            --surf2: #1a1a27;
-            --bdr: #222236;
-            --accent: #7c6af7;
-            --aglo: rgba(124, 106, 247, 0.14);
-            --txt: #e0e0ee;
-            --dim: #6e6e90;
-            --red: #f43f5e;
-            --warn: #f59e0b;
+            --bg: #f1f5f9;
+            --surf: #ffffff;
+            --surf2: #f8fafc;
+            --surf3: #f1f5f9;
+            --bdr: #e2e8f0;
+            --bdr2: #cbd5e1;
+            --txt: #0f172a;
+            --txt2: #334155;
+            --dim: #64748b;
+            --dim2: #94a3b8;
+            --accent: #1d4ed8;
+            --accent2: #1e3a8a;
+            --aglo: rgba(29, 78, 216, 0.08);
+            --red: #dc2626;
+            --rglo: rgba(220, 38, 38, 0.07);
+            --warn: #b45309;
+            --wglo: rgba(180, 83, 9, 0.08);
+            --ok: #047857;
+            --oglo: rgba(4, 120, 87, 0.08);
         }
 
         body {
-            font-family: system-ui, sans-serif;
+            font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
             background: var(--bg);
             color: var(--txt);
             min-height: 100vh;
-            display: flex;
-            justify-content: center;
+            font-size: 14px;
+            -webkit-font-smoothing: antialiased;
         }
 
         #app {
             width: 100%;
-            max-width: 500px;
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
+            max-width: 1160px;
+            margin: 0 auto;
+            padding: 0 20px 80px;
         }
 
         button {
             font-family: inherit;
+            font-size: inherit;
             cursor: pointer;
             border: none;
-            transition: all 0.15s;
+            transition: background .15s, border-color .15s, color .15s;
         }
 
-        input {
+        input,
+        select,
+        textarea {
             font-family: inherit;
-        }
-
-        .pill {
-            padding: 7px 14px;
-            border-radius: 20px;
-            font-size: 13px;
-            border: none;
-            background: var(--surf2);
+            font-size: inherit;
             color: var(--txt);
-            outline: 1px solid var(--bdr);
-            transition: all 0.15s;
         }
 
-        .pill.active {
-            background: var(--aglo);
-            color: var(--accent);
-            outline: 1px solid var(--accent);
+        .hidden {
+            display: none !important;
         }
 
-        .inp {
+        /* ── Header ── */
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 22px 0 18px;
+            flex-wrap: wrap;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            background: var(--accent);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 21px;
+        }
+
+        .brand h1 {
+            font-size: 19px;
+            font-weight: 800;
+            letter-spacing: -.4px;
+            line-height: 1.2;
+        }
+
+        .brand p {
+            font-size: 12.5px;
+            color: var(--dim);
+        }
+
+        .hdr-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        /* ── Buttons ── */
+        .btn {
+            padding: 9px 14px;
+            border-radius: 8px;
+            background: var(--surf);
+            color: var(--txt2);
+            font-size: 13px;
+            font-weight: 600;
+            border: 1px solid var(--bdr2);
+        }
+
+        .btn:hover {
+            background: var(--surf3);
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+        }
+
+        .btn-primary:hover {
+            background: var(--accent2);
+        }
+
+        .btn-danger {
+            color: var(--red);
+            border-color: #fecaca;
+            background: var(--surf);
+        }
+
+        .btn-danger:hover {
+            background: var(--rglo);
+        }
+
+        .btn-sm {
+            padding: 5px 8px;
+            font-size: 12px;
+            border-radius: 6px;
+        }
+
+        /* Keep the row actions reachable without horizontal scrolling. */
+        td.acts .btn-sm + .btn-sm {
+            margin-top: 4px;
+        }
+
+        @media (min-width: 1100px) {
+            td.acts .btn-sm + .btn-sm {
+                margin-top: 0;
+            }
+        }
+
+        /* ── Tabs ── */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            background: var(--surf);
+            border: 1px solid var(--bdr);
+            border-radius: 10px;
+            padding: 4px;
+            margin-bottom: 22px;
+        }
+
+        .tabs button {
+            flex: 1;
+            padding: 9px 0;
+            border-radius: 7px;
+            font-size: 14px;
+            font-weight: 500;
+            background: transparent;
+            color: var(--dim);
+        }
+
+        .tabs button.active {
+            background: var(--accent);
+            color: #fff;
+            font-weight: 650;
+        }
+
+        /* ── Cards ── */
+        .card {
+            background: var(--surf);
+            border: 1px solid var(--bdr);
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .card + .card {
+            margin-top: 16px;
+        }
+
+        .card-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--dim);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 14px;
+        }
+
+        /* ── Capture / recorder ── */
+        .capture-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .ring-wrap {
+            position: relative;
+            width: 148px;
+            height: 148px;
+        }
+
+        #ring-svg {
+            position: absolute;
+            inset: 0;
+            transform: rotate(-90deg);
+        }
+
+        #rec-btn {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 94px;
+            height: 94px;
+            border-radius: 50%;
+            background: var(--accent);
+            font-size: 34px;
+            color: #fff;
+            box-shadow: 0 6px 24px rgba(29, 78, 216, .28);
+        }
+
+        #rec-btn.rec {
+            background: var(--red);
+            box-shadow: 0 6px 24px rgba(220, 38, 38, .32);
+            animation: pulse 1.4s ease-in-out infinite;
+        }
+
+        #rec-btn.starting {
+            background: var(--warn);
+            box-shadow: 0 6px 24px rgba(180, 83, 9, .3);
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                box-shadow: 0 6px 24px rgba(220, 38, 38, .32);
+            }
+
+            50% {
+                box-shadow: 0 6px 34px rgba(220, 38, 38, .55);
+            }
+        }
+
+        #timer-display {
+            font-size: 28px;
+            font-weight: 800;
+            color: var(--red);
+            font-variant-numeric: tabular-nums;
+            margin-top: 2px;
+        }
+
+        #rec-label {
+            color: var(--dim);
+            font-size: 13.5px;
+            margin-top: 6px;
+            text-align: center;
+        }
+
+        #live-box {
+            margin-top: 16px;
             width: 100%;
             background: var(--surf2);
             border: 1px solid var(--bdr);
             border-radius: 10px;
-            padding: 12px 14px;
-            color: var(--txt);
-            font-size: 15px;
+            padding: 14px;
+            max-height: 170px;
+            overflow-y: auto;
+            line-height: 1.7;
+        }
+
+        .eyebrow {
+            font-size: 10px;
+            color: var(--dim2);
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            margin-bottom: 6px;
+            font-weight: 700;
+        }
+
+        .divider {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            width: 100%;
+            margin: 22px 0 14px;
+            color: var(--dim2);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+        }
+
+        .divider::before,
+        .divider::after {
+            content: "";
+            flex: 1;
+            height: 1px;
+            background: var(--bdr);
+        }
+
+        textarea.inp {
+            resize: vertical;
+            min-height: 78px;
+            line-height: 1.65;
+        }
+
+        .inp {
+            width: 100%;
+            background: var(--surf);
+            border: 1px solid var(--bdr2);
+            border-radius: 8px;
+            padding: 10px 12px;
             outline: none;
         }
 
         .inp:focus {
             border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--aglo);
         }
 
-        .hidden {
-            display: none;
+        .chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
         }
 
-        .flt-label {
-            font-size: 10px;
+        .chip {
+            padding: 7px 12px;
+            border-radius: 16px;
+            background: var(--surf2);
+            border: 1px solid var(--bdr);
+            color: var(--dim);
+            font-size: 12.5px;
+            text-align: left;
+        }
+
+        .chip:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: var(--aglo);
+        }
+
+        /* ── Form grid ── */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 14px;
+        }
+
+        .field label {
+            display: block;
+            font-size: 11px;
+            font-weight: 700;
             color: var(--dim);
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: .6px;
             margin-bottom: 5px;
         }
 
-        /* Multi-select filter dropdown */
-        .ms {
-            position: relative;
+        .field.wide {
+            grid-column: 1 / -1;
         }
 
-        .ms-btn {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 6px;
-            cursor: pointer;
-            text-align: left;
+        .readout {
+            padding: 10px 12px;
+            border-radius: 8px;
+            background: var(--surf3);
+            border: 1px solid var(--bdr);
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* ── Banners ── */
+        .banner {
+            border-radius: 10px;
+            padding: 13px 15px;
             font-size: 13px;
-            padding: 9px 10px;
+            line-height: 1.6;
+            margin-bottom: 16px;
+            display: flex;
+            gap: 11px;
+            align-items: flex-start;
         }
 
-        .ms-btn .ms-text {
-            overflow: hidden;
-            text-overflow: ellipsis;
+        .banner .ico {
+            font-size: 16px;
+            line-height: 1.3;
+        }
+
+        .banner .body {
+            flex: 1;
+        }
+
+        .banner strong {
+            display: block;
+            margin-bottom: 2px;
+        }
+
+        .banner-red {
+            background: var(--rglo);
+            border: 1px solid #fecaca;
+            color: #991b1b;
+        }
+
+        .banner-warn {
+            background: var(--wglo);
+            border: 1px solid #fde68a;
+            color: #92400e;
+        }
+
+        .banner-info {
+            background: var(--aglo);
+            border: 1px solid #bfdbfe;
+            color: #1e40af;
+        }
+
+        /* ── Metrics ── */
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .metric {
+            background: var(--surf);
+            border: 1px solid var(--bdr);
+            border-radius: 11px;
+            padding: 14px 16px;
+        }
+
+        .metric .k {
+            font-size: 10.5px;
+            color: var(--dim);
+            text-transform: uppercase;
+            letter-spacing: .9px;
+            font-weight: 700;
+        }
+
+        .metric .v {
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: -.6px;
+            margin-top: 4px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .metric .v.alert {
+            color: var(--red);
+        }
+
+        /* ── Table ── */
+        .tbl-wrap {
+            overflow-x: auto;
+            border: 1px solid var(--bdr);
+            border-radius: 12px;
+            background: var(--surf);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        thead th {
+            text-align: left;
+            font-size: 10.5px;
+            font-weight: 700;
+            color: var(--dim);
+            text-transform: uppercase;
+            letter-spacing: .8px;
+            padding: 10px 9px;
+            background: var(--surf2);
+            border-bottom: 1px solid var(--bdr);
             white-space: nowrap;
         }
 
-        .ms-btn .ms-caret {
-            color: var(--dim);
-            font-size: 10px;
-            flex-shrink: 0;
-            transition: transform 0.15s;
+        tbody td {
+            padding: 10px 9px;
+            border-bottom: 1px solid var(--bdr);
+            vertical-align: top;
         }
 
-        .ms.open .ms-btn {
-            border-color: var(--accent);
+        tbody tr:last-child td {
+            border-bottom: none;
         }
 
-        .ms.open .ms-caret {
-            transform: rotate(180deg);
-        }
-
-        .ms-panel {
-            display: none;
-            position: absolute;
-            top: calc(100% + 4px);
-            left: 0;
-            right: 0;
-            z-index: 50;
-            background: var(--surf);
-            border: 1px solid var(--bdr);
-            border-radius: 10px;
-            padding: 5px;
-            max-height: 210px;
-            overflow-y: auto;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-        }
-
-        .ms.open .ms-panel {
-            display: block;
-        }
-
-        .ms-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 9px;
-            border-radius: 7px;
-            cursor: pointer;
-            font-size: 13px;
-            color: var(--txt);
-        }
-
-        .ms-row:hover {
+        tbody tr:hover {
             background: var(--surf2);
         }
 
-        .ms-check {
-            width: 15px;
-            height: 15px;
-            border-radius: 4px;
+        tbody tr.conflict td {
+            background: var(--rglo);
+        }
+
+        td.num {
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+
+        td.desc {
+            min-width: 200px;
+            color: var(--txt2);
+            line-height: 1.55;
+        }
+
+        td.acts {
+            white-space: nowrap;
+            text-align: right;
+        }
+
+        .row-inp {
+            width: 100%;
+            min-width: 90px;
+            background: var(--surf);
+            border: 1px solid var(--accent);
+            border-radius: 6px;
+            padding: 6px 7px;
+            font-size: 12.5px;
+            outline: none;
+        }
+
+        /* ── Badges ── */
+        .badge {
+            display: inline-block;
+            padding: 3px 7px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 650;
+            white-space: nowrap;
+        }
+
+        .b-court {
+            background: var(--wglo);
+            color: var(--warn);
+            border: 1px solid #fde68a;
+        }
+
+        .b-out {
+            background: var(--surf3);
+            color: var(--dim);
             border: 1px solid var(--bdr);
+        }
+
+        .b-red {
+            background: var(--rglo);
+            color: var(--red);
+            border: 1px solid #fecaca;
+        }
+
+        .b-ok {
+            background: var(--oglo);
+            color: var(--ok);
+            border: 1px solid #a7f3d0;
+        }
+
+        .b-cat {
+            background: var(--aglo);
+            color: var(--accent);
+            border: 1px solid #bfdbfe;
+        }
+
+        /* ── Meter ── */
+        .meter {
+            height: 9px;
+            border-radius: 5px;
+            background: var(--surf3);
+            overflow: hidden;
+            border: 1px solid var(--bdr);
+        }
+
+        .meter > span {
+            display: block;
+            height: 100%;
+            background: var(--ok);
+            transition: width .3s;
+        }
+
+        .meter > span.warn {
+            background: var(--warn);
+        }
+
+        .meter > span.over {
+            background: var(--red);
+        }
+
+        .vcard-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 14px;
+            flex-wrap: wrap;
+            margin-bottom: 14px;
+        }
+
+        .vcard-head h3 {
+            font-size: 17px;
+            font-weight: 750;
+            letter-spacing: -.3px;
+        }
+
+        .vcard-head p {
+            font-size: 12.5px;
+            color: var(--dim);
+            margin-top: 2px;
+        }
+
+        .vstats {
+            display: flex;
+            gap: 22px;
+            flex-wrap: wrap;
+            margin: 14px 0 10px;
+        }
+
+        .vstat .k {
+            font-size: 10.5px;
+            color: var(--dim);
+            text-transform: uppercase;
+            letter-spacing: .8px;
+            font-weight: 700;
+        }
+
+        .vstat .v {
+            font-size: 17px;
+            font-weight: 750;
+            font-variant-numeric: tabular-nums;
+            margin-top: 2px;
+        }
+
+        .filters {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+            align-items: end;
+        }
+
+        .empty {
+            text-align: center;
+            padding: 46px 20px;
+            color: var(--dim);
+            line-height: 1.7;
+        }
+
+        /* ── Modal ── */
+        .overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, .45);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 10px;
-            line-height: 1;
-            color: #fff;
-            flex-shrink: 0;
+            padding: 20px;
+            z-index: 50;
         }
 
-        .ms-row.sel .ms-check {
-            background: var(--accent);
-            border-color: var(--accent);
+        .modal {
+            background: var(--surf);
+            border-radius: 14px;
+            width: 100%;
+            max-width: 640px;
+            max-height: 88vh;
+            overflow-y: auto;
+            padding: 22px;
+            box-shadow: 0 20px 50px rgba(15, 23, 42, .25);
+        }
+
+        .modal h2 {
+            font-size: 18px;
+            font-weight: 750;
+            margin-bottom: 4px;
+        }
+
+        .affirm-block {
+            border: 1px solid var(--bdr);
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 14px;
+        }
+
+        .affirm-text {
+            background: var(--surf2);
+            border: 1px solid var(--bdr);
+            border-radius: 8px;
+            padding: 13px;
+            font-size: 12.5px;
+            line-height: 1.75;
+            white-space: pre-wrap;
+            margin-top: 10px;
+            font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        }
+
+        .modal-acts {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+            margin-top: 18px;
+        }
+
+        @media (max-width: 640px) {
+            #app {
+                padding: 0 14px 60px;
+            }
+
+            .hdr-actions {
+                width: 100%;
+            }
+
+            .hdr-actions .btn {
+                flex: 1;
+            }
         }
     </style>
 </head>
@@ -197,358 +752,154 @@
 <body>
     <div id="app">
 
-        <!-- Header -->
-        <div style="padding:18px 20px 0;display:flex;justify-content:space-between;align-items:center">
-            <div>
-                <div style="font-size:18px;font-weight:800;letter-spacing:-0.4px">Alfred</div>
-                <div id="memo-count" style="font-size:12px;color:var(--dim);margin-top:1px">0 memos saved</div>
+        <!-- ══ HEADER ══ -->
+        <header>
+            <div class="brand">
+                <div class="logo">&#9878;</div>
+                <div>
+                    <h1>Alfred</h1>
+                    <p id="hdr-sub">Voucher time tracker</p>
+                </div>
             </div>
-            <div style="display:flex;gap:6px">
-                <button onclick="importMemos()" title="Restore memos from an Alfred JSON file"
-                    style="padding:8px 12px;border-radius:8px;background:var(--surf2);color:var(--txt);font-size:13px;font-weight:600;outline:1px solid var(--bdr)">⬆
-                    Import</button>
-                <button onclick="exportMemos()" title="Download all memos as a JSON file"
-                    style="padding:8px 12px;border-radius:8px;background:var(--surf2);color:var(--txt);font-size:13px;font-weight:600;outline:1px solid var(--bdr)">⬇
-                    Export</button>
+            <div class="hdr-actions">
+                <button class="btn" onclick="exportCSV()" title="Download all filtered entries as a voucher-ready CSV">&#8681;
+                    Export CSV</button>
+                <button class="btn" onclick="exportJSON()" title="Download a full JSON backup">&#8681; Backup</button>
+                <button class="btn" onclick="importJSON()" title="Restore entries from a JSON backup">&#8679;
+                    Restore</button>
             </div>
+        </header>
+
+        <!-- ══ TABS ══ -->
+        <nav class="tabs">
+            <button id="tab-log" class="active" onclick="switchTab('log')">&#127908; Log Time</button>
+            <button id="tab-entries" onclick="switchTab('entries')">&#128203; Entries</button>
+            <button id="tab-vouchers" onclick="switchTab('vouchers')">&#9878; Vouchers</button>
+        </nav>
+
+        <div id="demo-banner" class="banner banner-info hidden">
+            <div class="ico">&#8505;</div>
+            <div class="body">
+                <strong>Demo data loaded</strong>
+                Sample cases (Douglas Zimbler, Joaquin Diaz) are here so you can see the tracker working. Clear them
+                before logging real billable time.
+            </div>
+            <button class="btn btn-sm" onclick="clearDemo()">Clear demo data</button>
         </div>
 
-        <!-- Tabs -->
-        <div style="display:flex;margin:14px 20px 0;background:var(--surf);border-radius:10px;padding:4px;gap:3px">
-            <button id="tab-record" onclick="switchTab('record')"
-                style="flex:1;padding:8px 0;border-radius:7px;font-size:14px;font-weight:600;background:var(--accent);color:#fff">🎙
-                Record</button>
-            <button id="tab-browse" onclick="switchTab('browse')"
-                style="flex:1;padding:8px 0;border-radius:7px;font-size:14px;font-weight:400;background:transparent;color:var(--dim)">📋
-                Browse</button>
-        </div>
+        <!-- ══════════ LOG VIEW ══════════ -->
+        <section id="view-log">
 
-        <!-- Content -->
-        <div style="flex:1;padding:22px 20px 80px;overflow-y:auto" id="content">
-
-            <!-- RECORD VIEW -->
-            <div id="view-record">
-                <div id="rec-idle" style="display:flex;flex-direction:column;align-items:center;padding-top:12px">
-                    <!-- Ring + Button -->
-                    <div style="position:relative;width:148px;height:148px;margin-bottom:6px">
-                        <svg id="ring-svg" width="148" height="148"
-                            style="position:absolute;top:0;left:0;transform:rotate(-90deg)">
-                            <circle cx="74" cy="74" r="54" fill="none" stroke="var(--surf2)" stroke-width="7" />
-                            <circle id="ring-progress" cx="74" cy="74" r="54" fill="none" stroke="var(--red)"
+            <!-- Capture -->
+            <div id="capture" class="card">
+                <div class="capture-wrap">
+                    <div class="ring-wrap">
+                        <svg id="ring-svg" width="148" height="148">
+                            <circle cx="74" cy="74" r="54" fill="none" stroke="#e2e8f0" stroke-width="7" />
+                            <circle id="ring-progress" cx="74" cy="74" r="54" fill="none" stroke="#dc2626"
                                 stroke-width="7" stroke-dasharray="339.3" stroke-dashoffset="339.3"
-                                stroke-linecap="round" style="transition:stroke-dashoffset 1s linear;display:none" />
+                                stroke-linecap="round" style="transition:stroke-dashoffset 1s linear" class="hidden" />
                         </svg>
-                        <button id="rec-btn" onclick="toggleRec()" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-            width:94px;height:94px;border-radius:50%;background:var(--accent);font-size:34px;
-            box-shadow:0 0 36px rgba(124,106,247,0.25)">🎙</button>
+                        <button id="rec-btn" onclick="toggleRec()">&#127908;</button>
                     </div>
-                    <div id="timer-display"
-                        style="font-size:30px;font-weight:800;color:var(--red);font-variant-numeric:tabular-nums;margin-bottom:4px;display:none">
-                        30s</div>
-                    <div id="rec-label" style="color:var(--dim);font-size:14px;text-align:center;margin-bottom:6px">Tap
-                        to start recording</div>
-                    <div id="rec-sub" style="font-size:12px;color:var(--dim);margin-bottom:8px;display:none">Speak your
-                        thought. Up to 30 seconds.</div>
-                    <div id="rec-error"
-                        style="display:none;margin-top:12px;background:rgba(244,63,94,0.08);border:1px solid rgba(244,63,94,0.3);border-radius:10px;padding:11px 14px;font-size:13px;color:var(--red);line-height:1.6;width:100%">
-                    </div>
-                    <div id="live-box"
-                        style="display:none;margin-top:16px;background:var(--surf);border:1px solid var(--bdr);border-radius:12px;padding:14px;width:100%;max-height:160px;overflow-y:auto;font-size:14px;line-height:1.75;color:var(--txt)">
-                        <div
-                            style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px">
-                            Live transcript</div>
+                    <div id="timer-display" class="hidden">60s</div>
+                    <div id="rec-label">Tap to dictate a time entry</div>
+                    <div id="rec-sub" class="hidden"
+                        style="font-size:12px;color:var(--dim2);margin-top:4px">Say the case, the attorney, what you
+                        did, and how long.</div>
+
+                    <div id="rec-error" class="banner banner-red hidden"
+                        style="margin-top:16px;width:100%;margin-bottom:0"></div>
+
+                    <div id="live-box" class="hidden">
+                        <div class="eyebrow">Live transcript</div>
                         <div id="live-text"></div>
                     </div>
-                    <div id="how-it-works"
-                        style="margin-top:28px;background:var(--surf);border-radius:12px;padding:16px;width:100%;border:1px solid var(--bdr)">
-                        <div
-                            style="font-size:12px;font-weight:600;color:var(--dim);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px">
-                            How it works</div>
-                        <div style="font-size:13px;color:var(--dim);line-height:2">
-                            🎙 &nbsp;Tap record and speak your idea (up to 30s)<br>
-                            ✍️ &nbsp;App transcribes your voice in real time<br>
-                            🗂 &nbsp;Name and categorize by voice or by typing<br>
-                            📋 &nbsp;Browse all memos on the Browse tab
-                        </div>
-                    </div>
-                </div>
 
-                <!-- WIZARD -->
-                <div id="wizard" class="hidden">
-                    <div id="wiz-progress" style="display:flex;gap:5px;margin-bottom:22px">
-                        <div class="prog-bar" style="height:3px;flex:1;border-radius:2px;background:var(--accent)">
-                        </div>
-                        <div class="prog-bar" style="height:3px;flex:1;border-radius:2px;background:var(--bdr)"></div>
+                    <div class="divider">or type it</div>
+
+                    <textarea id="text-input" class="inp"
+                        placeholder="e.g. Spent 45 minutes reviewing phone extractions for the Douglas Zimbler case with attorney Gloria"></textarea>
+                    <div style="display:flex;justify-content:flex-end;width:100%;margin-top:10px">
+                        <button class="btn btn-primary" onclick="parseTyped()">Parse entry &#8594;</button>
                     </div>
 
-                    <!-- Step: Name -->
-                    <div id="step-name">
-                        <div
-                            style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;margin-bottom:6px">
-                            Step 1 of 2</div>
-                        <div style="font-size:21px;font-weight:700;margin-bottom:20px">Name this memo</div>
-                        <input id="draft-name" class="inp" placeholder="e.g. App idea for onboarding flow..." />
-                        <div style="display:flex;gap:10px;margin-top:16px">
-                            <button onclick="wizVoice('name')" id="voice-btn-name" class="voice-btn"
-                                style="padding:12px 16px;border-radius:10px;border:1px solid var(--bdr);background:var(--surf2);color:var(--dim);font-size:14px;min-width:130px">🎤
-                                Voice input</button>
-                            <button onclick="nextStep('name')"
-                                style="flex:1;padding:12px 0;border-radius:10px;background:var(--accent);color:#fff;font-weight:700;font-size:15px">Next
-                                →</button>
-                        </div>
-                        <div id="transcript-preview-name" class="hidden"
-                            style="margin-top:22px;background:var(--surf);border:1px solid var(--bdr);border-radius:10px;padding:13px">
-                            <div
-                                style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;margin-bottom:6px">
-                                Your memo</div>
-                            <div id="tp-name-text"
-                                style="font-size:13px;color:var(--dim);line-height:1.75;max-height:80px;overflow-y:auto">
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Step: Confirm -->
-                    <div id="step-confirm" class="hidden">
-                        <div
-                            style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;margin-bottom:6px">
-                            Step 2 of 2</div>
-                        <div style="font-size:21px;font-weight:700;margin-bottom:20px">Confirm & save</div>
-                        <div
-                            style="background:var(--surf);border:1px solid var(--bdr);border-radius:14px;padding:18px;margin-bottom:18px">
-                            <div id="confirm-name" style="font-size:18px;font-weight:700;margin-bottom:10px"></div>
-                            <div id="confirm-tags" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px"></div>
-                            <div id="confirm-content"
-                                style="font-size:14px;color:var(--dim);line-height:1.75;border-top:1px solid var(--bdr);padding-top:13px">
-                            </div>
-                        </div>
-                        <div style="display:flex;gap:8px">
-                            <button onclick="discardMemo()"
-                                style="padding:12px 14px;border-radius:10px;border:1px solid var(--bdr);background:var(--surf2);color:var(--dim);font-size:14px">Discard</button>
-                            <button onclick="showStep('name')"
-                                style="padding:12px 14px;border-radius:10px;border:1px solid var(--bdr);background:var(--surf2);color:var(--txt);font-size:14px">←
-                                Edit</button>
-                            <button onclick="saveMemo()"
-                                style="flex:1;padding:12px 0;border-radius:10px;background:var(--accent);color:#fff;font-weight:700;font-size:15px">Save
-                                memo ✓</button>
-                        </div>
+                    <div style="width:100%;margin-top:18px">
+                        <div class="eyebrow">Quick examples</div>
+                        <div class="chips" id="chips"></div>
                     </div>
                 </div>
             </div>
 
-            <!-- BROWSE VIEW -->
-            <div id="view-browse" class="hidden">
-                <input id="search-input" class="inp" placeholder="Search memos…" oninput="renderBrowse()"
-                    style="margin-bottom:14px" />
-
-                <!-- Navigate by (dimension) -->
-                <div
-                    style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;margin-bottom:6px">
-                    Navigate by</div>
-                <div id="dim-selector" style="display:flex;gap:7px;overflow-x:auto;padding-bottom:6px;margin-bottom:14px">
+            <!-- Review parsed entry -->
+            <div id="review" class="card hidden">
+                <div class="card-title">Review &amp; confirm entry</div>
+                <div id="r-conflict" class="banner banner-red hidden"></div>
+                <div id="r-cap" class="banner banner-warn hidden"></div>
+                <div id="r-form" class="grid"></div>
+                <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px;flex-wrap:wrap">
+                    <button class="btn" onclick="discardDraft()">Discard</button>
+                    <button class="btn btn-primary" onclick="saveDraft()">Save entry</button>
                 </div>
-
-                <!-- Sort -->
-                <div style="display:flex;align-items:center;gap:9px;margin-bottom:14px">
-                    <span
-                        style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;flex-shrink:0">Sort</span>
-                    <select id="sort-select" class="inp" onchange="onSortChange()"
-                        style="appearance:auto;font-size:13px;padding:9px 10px">
-                        <option value="date-desc">Newest first</option>
-                        <option value="date-asc">Oldest first</option>
-                        <option value="priority">Priority (High → Low)</option>
-                        <option value="difficulty">Difficulty (High → Low)</option>
-                        <option value="blocker">Blocker (Yes → No)</option>
-                    </select>
+                <div id="r-raw" class="hidden"
+                    style="margin-top:18px;border-top:1px solid var(--bdr);padding-top:14px">
+                    <div class="eyebrow">What you said</div>
+                    <div id="r-raw-text" style="font-size:13px;color:var(--dim);line-height:1.7"></div>
                 </div>
+            </div>
+        </section>
 
-                <!-- Combined property filters -->
-                <div
-                    style="background:var(--surf);border:1px solid var(--bdr);border-radius:12px;padding:14px;margin-bottom:18px">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-                        <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px">Filters
-                        </div>
-                        <button onclick="clearFilters()" id="clear-filters-btn"
-                            style="background:none;color:var(--accent);font-size:12px;font-weight:600;padding:2px 6px;border-radius:6px;display:none">Clear
-                            all</button>
+        <!-- ══════════ ENTRIES VIEW ══════════ -->
+        <section id="view-entries" class="hidden">
+            <div class="metrics" id="metrics"></div>
+
+            <div class="card" style="margin-bottom:16px">
+                <div class="card-title">Filters</div>
+                <div class="filters">
+                    <div class="field">
+                        <label for="f-case">Case / defendant</label>
+                        <select id="f-case" class="inp" onchange="onFilterChange()"></select>
                     </div>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-                        <div>
-                            <div class="flt-label">Priority</div>
-                            <div class="ms" id="ms-priority">
-                                <div class="ms-btn inp" data-ms="priority"><span class="ms-text">All</span><span
-                                        class="ms-caret">▾</span></div>
-                                <div class="ms-panel" id="ms-panel-priority"></div>
-                            </div>
-                        </div>
-                        <div>
-                            <div class="flt-label">Difficulty</div>
-                            <div class="ms" id="ms-difficulty">
-                                <div class="ms-btn inp" data-ms="difficulty"><span class="ms-text">All</span><span
-                                        class="ms-caret">▾</span></div>
-                                <div class="ms-panel" id="ms-panel-difficulty"></div>
-                            </div>
-                        </div>
-                        <div>
-                            <div class="flt-label">Blocker</div>
-                            <div class="ms" id="ms-blocker">
-                                <div class="ms-btn inp" data-ms="blocker"><span class="ms-text">All</span><span
-                                        class="ms-caret">▾</span></div>
-                                <div class="ms-panel" id="ms-panel-blocker"></div>
-                            </div>
-                        </div>
-                        <div>
-                            <div class="flt-label">Status</div>
-                            <div class="ms" id="ms-status">
-                                <div class="ms-btn inp" data-ms="status"><span class="ms-text">All</span><span
-                                        class="ms-caret">▾</span></div>
-                                <div class="ms-panel" id="ms-panel-status"></div>
-                            </div>
-                        </div>
-                        <div>
-                            <div class="flt-label">Project</div>
-                            <div class="ms" id="ms-project">
-                                <div class="ms-btn inp" data-ms="project"><span class="ms-text">All</span><span
-                                        class="ms-caret">▾</span></div>
-                                <div class="ms-panel" id="ms-panel-project"></div>
-                            </div>
-                        </div>
-                        <div>
-                            <div class="flt-label">Sub-Project</div>
-                            <div class="ms" id="ms-subProject">
-                                <div class="ms-btn inp" data-ms="subProject"><span class="ms-text">All</span><span
-                                        class="ms-caret">▾</span></div>
-                                <div class="ms-panel" id="ms-panel-subProject"></div>
-                            </div>
-                        </div>
-                        <div>
-                            <div class="flt-label">Frequency</div>
-                            <div class="ms" id="ms-recurringFrequency">
-                                <div class="ms-btn inp" data-ms="recurringFrequency"><span class="ms-text">All</span><span
-                                        class="ms-caret">▾</span></div>
-                                <div class="ms-panel" id="ms-panel-recurringFrequency"></div>
-                            </div>
-                        </div>
+                    <div class="field">
+                        <label for="f-attorney">Attorney</label>
+                        <select id="f-attorney" class="inp" onchange="onFilterChange()"></select>
                     </div>
-                    <div id="filter-summary"
-                        style="font-size:12px;color:var(--dim);margin-top:11px;line-height:1.6;display:none"></div>
+                    <div class="field">
+                        <label for="f-from">From date</label>
+                        <input type="date" id="f-from" class="inp" onchange="onFilterChange()" />
+                    </div>
+                    <div class="field">
+                        <label for="f-to">To date</label>
+                        <input type="date" id="f-to" class="inp" onchange="onFilterChange()" />
+                    </div>
+                    <div class="field">
+                        <label>&nbsp;</label>
+                        <button class="btn" style="width:100%" onclick="clearFilters()">Clear filters</button>
+                    </div>
                 </div>
-                <div id="browse-content"></div>
+                <label style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;color:var(--txt2)">
+                    <input type="checkbox" id="f-conflicts" onchange="onFilterChange()" />
+                    Show only entries with time conflicts
+                </label>
             </div>
 
-        </div>
+            <div id="entries-body"></div>
+        </section>
 
-        <!-- EDIT MEMO MODAL -->
-        <div id="edit-modal"
-            style="position:fixed;inset:0;background:rgba(0,0,0,0.65);display:none;justify-content:center;align-items:center;z-index:100;padding:16px">
-            <div
-                style="background:var(--surf);border:1px solid var(--bdr);border-radius:14px;width:100%;max-width:460px;max-height:90vh;overflow-y:auto;padding:22px">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
-                    <div style="font-size:18px;font-weight:700">Edit memo</div>
-                    <button onclick="closeEdit()"
-                        style="background:none;color:var(--dim);font-size:18px;padding:2px 6px;border-radius:6px">✕</button>
-                </div>
+        <!-- ══════════ VOUCHERS VIEW ══════════ -->
+        <section id="view-vouchers" class="hidden">
+            <div id="vouchers-body"></div>
+        </section>
+    </div>
 
-                <div
-                    style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;margin-bottom:6px">
-                    Name</div>
-                <input id="edit-name" class="inp" style="margin-bottom:16px" />
-
-                <div style="display:flex;gap:10px;margin-bottom:16px">
-                    <div style="flex:1">
-                        <div
-                            style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;margin-bottom:6px">
-                            Priority</div>
-                        <select id="edit-priority" class="inp" style="appearance:auto;font-size:13px;padding:10px">
-                            <option value="">—</option>
-                            <option value="High">High</option>
-                            <option value="Medium">Medium</option>
-                            <option value="Low">Low</option>
-                        </select>
-                    </div>
-                    <div style="flex:1">
-                        <div
-                            style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;margin-bottom:6px">
-                            Difficulty</div>
-                        <select id="edit-difficulty" class="inp" style="appearance:auto;font-size:13px;padding:10px">
-                            <option value="">—</option>
-                            <option value="Hard">Hard</option>
-                            <option value="Medium">Medium</option>
-                            <option value="Easy">Easy</option>
-                        </select>
-                    </div>
-                    <div style="flex:1">
-                        <div
-                            style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;margin-bottom:6px">
-                            Blocker</div>
-                        <select id="edit-blocker" class="inp" onchange="onBlockerChange()"
-                            style="appearance:auto;font-size:13px;padding:10px">
-                            <option value="">—</option>
-                            <option value="Yes">Yes</option>
-                            <option value="No">No</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div id="edit-blocker-reason-wrap" style="margin-bottom:16px;display:none">
-                    <div
-                        style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;margin-bottom:6px">
-                        What's the blocker?</div>
-                    <input id="edit-blocker-reason" class="inp" placeholder="Describe what's blocking this…"
-                        style="font-size:13px" />
-                </div>
-
-                <div style="display:flex;gap:10px;margin-bottom:16px">
-                    <div style="flex:1">
-                        <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;margin-bottom:6px">Status</div>
-                        <select id="edit-status" class="inp" style="appearance:auto;font-size:13px;padding:10px">
-                            <option value="">—</option>
-                            <option value="To Do">To Do</option>
-                            <option value="Doing">Doing</option>
-                            <option value="Scheduled">Scheduled</option>
-                            <option value="On Hold">On Hold</option>
-                            <option value="Done">Done</option>
-                        </select>
-                    </div>
-                    <div style="flex:1">
-                        <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;margin-bottom:6px">Recurring Frequency</div>
-                        <select id="edit-recur" class="inp" style="appearance:auto;font-size:13px;padding:10px">
-                            <option value="">—</option>
-                            <option value="Daily">Daily</option>
-                            <option value="Recurring">Recurring</option>
-                            <option value="One-time">One-time</option>
-                            <option value="Sporadic">Sporadic</option>
-                            <option value="Iterative">Iterative</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div style="margin-bottom:16px">
-                    <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;margin-bottom:6px">Project</div>
-                    <select id="edit-project" class="inp" style="appearance:auto;font-size:13px;padding:10px;width:100%">
-                        <option value="">—</option>
-                    </select>
-                </div>
-
-                <div style="margin-bottom:16px">
-                    <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;margin-bottom:6px">Sub-Project</div>
-                    <select id="edit-sub-project" class="inp" style="appearance:auto;font-size:13px;padding:10px;width:100%">
-                        <option value="">—</option>
-                    </select>
-                </div>
-
-                <div
-                    style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.3px;margin-bottom:6px">
-                    Content</div>
-                <textarea id="edit-content" class="inp" rows="6"
-                    style="margin-bottom:20px;resize:vertical;line-height:1.7;font-size:14px"></textarea>
-
-                <div style="display:flex;gap:10px">
-                    <button onclick="closeEdit()"
-                        style="flex:1;padding:12px 0;border-radius:10px;border:1px solid var(--bdr);background:var(--surf2);color:var(--dim);font-size:14px">Cancel</button>
-                    <button onclick="saveEdit()"
-                        style="flex:1;padding:12px 0;border-radius:10px;background:var(--accent);color:#fff;font-weight:700;font-size:15px">Save
-                        ✓</button>
-                </div>
+    <!-- ══ AFFIRMATION MODAL ══ -->
+    <div id="affirm-overlay" class="overlay hidden" onclick="if(event.target===this)closeAffirm()">
+        <div class="modal">
+            <h2 id="affirm-title">Affirmations required</h2>
+            <p id="affirm-sub" style="font-size:13px;color:var(--dim);line-height:1.6"></p>
+            <div id="affirm-body"></div>
+            <div class="modal-acts">
+                <button class="btn" onclick="closeAffirm()">Close</button>
             </div>
         </div>
     </div>
@@ -556,63 +907,140 @@
     <script>
         // ─────────────────────────────────────────────────────────────
         //  SUPABASE CLOUD SYNC  (optional — app runs local-only until set)
-        //  Paste your project's values below. The anon key is safe to be
-        //  public: Row-Level Security keeps each user to their own data.
+        //  The anon/publishable key is safe to be public; RLS is permissive
+        //  because this is a single-user, no-login personal tool.
         // ─────────────────────────────────────────────────────────────
         const SUPABASE_URL = 'https://aoiaajghndbvjkkkqbnm.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_WbYoILo-3Qocw1XuhK38Hw_fqnj7TpW';
 
-        const cloudEnabled = SUPABASE_URL.startsWith('http') && !SUPABASE_ANON_KEY.startsWith('REPLACE');
+        // If the Supabase CDN is blocked or offline, window.supabase is undefined.
+        // Degrade to localStorage-only rather than letting the whole app die here.
+        const cloudEnabled = SUPABASE_URL.startsWith('http')
+            && !SUPABASE_ANON_KEY.startsWith('REPLACE')
+            && !!(window.supabase && window.supabase.createClient);
         const sb = cloudEnabled ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
             auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
         }) : null;
-        const SETTINGS_ID = 'global';   // single shared settings row (no per-user auth)
+        const ENTRIES_TABLE = 'alfred_time_entries';
+        const CASES_TABLE = 'alfred_cases';
         let syncTimer = null;
 
-        const PROJECTS = ['2025 American Trips','Artemis Design Labs','Ascend NYC','Financial','General','Greencard Application','Health Insurance','Items to Sell','MVP Creator','Social Life','Startup Ventures','UX Career'];
-        const SUB_PROJECTS = ['ADL Business & Operations','ADL Design','ADL Engineering','ADL Growth Hacking','ADL Research','ADL Service Module','AI Code Provenance Logger','AI Education','AI Solutions for SMBs (Newsletter)','AI Use Case Validator','Abode','Accessibility Compliance Sub-Agent','Agents / Automations for SMBs','Anti-Pattern Auto-Flagger','Ascend NYC','Auto-Layout to Tailwind Translator','Bakufu','Behavioral Analytics','Chart Standardization Agent','Component Adoption Funnel','Component Creation Plugin','Component Health Score','Component Library Onboarding Agent','Component Provenance Tracker','DS Migration Co-Pilot','Dashboard Layout Architect Agent','Data Table Component Forge','Design System Health Bot','Design System ROI Dashboard','Empty/Loading/Error State Auditor','Figma Spec Generator Agent','Figma↔React Drift Monitor','Financial','Frontend Decision Log Agent','Frontend Velocity Telemetry','Hardcoded Value Hunter','Job Applications','Layer Renaming Figma Plugin','Living Component Docs','Luxury Chique','Mobility','Modular Market','Optimize Inc Website','Orphan Component Reaper','PR Design Token Linter','Personal Brand','Portfolio Updates','Product Feedback Platform','Prompt Repo','Refunds','Seamline (Email Optimizer)','Start','Startup Ventures','Storybook-to-Production Sync Agent','Sub-Project Tasks','Target User Persona Creation','Tasks Breakdown by Individual Sub-Tasks','Token Management Figma Plugin','Token Sync Pipeline','Transcribe Musashi videos + build NotebookLM audio logs','Tribal Knowledge Extractor','Variant Coverage Auditor','Vibe-Code Refactor Agent','Visual Regression Sentinel','Weekend Tasks','eCommerce','i18n / RTL Readiness Agent'];
-        const STATUS_OPTIONS = ['To Do','Doing','Scheduled','On Hold','Done'];
-        const STATUS_ORDER = {'To Do':0,'Doing':1,'Scheduled':2,'On Hold':3,'Done':4,'Unset':5};
-        const RECUR_OPTIONS = ['Daily','Recurring','One-time','Sporadic','Iterative'];
+        // ── Billing defaults ──
+        const DEFAULT_RATE = 250;     // $/hr
+        const DEFAULT_CAP = 3000;     // statutory voucher cap, $
+        const DELAY_DAYS = 90;        // work older than this triggers a Delay Affirmation
+        const DAY_HOURS_LIMIT = 8;    // hours billed on one calendar day that triggers Over-Billing
+        const REC_MAX = 60;           // seconds of dictation per entry
 
-        function noteToRow(n) {
+        const CATEGORIES = ['Discovery Download', 'File Review', 'Extraction Analysis',
+            'Phone Call / Conference', 'Report Writing', 'Court Testimony', 'Travel', 'Other'];
+        const MODES = ['Out-of-Court', 'In-Court'];
+
+        const EXAMPLES = [
+            'Review phone extraction for Douglas Zimbler with Gloria Keum for 1.5 hrs',
+            'Call with attorney regarding Joaquin Diaz discovery download 45 mins',
+            'Testified in court on the Zimbler matter from 10am to 12:30pm',
+            'Drafted forensic report for Joaquin Diaz yesterday for 2 hours'
+        ];
+
+        // ── State ──
+        let entries = JSON.parse(localStorage.getItem('alfred-entries') || '[]');
+        let caseBook = JSON.parse(localStorage.getItem('alfred-cases') || '[]'); // [{name, attorney, rate, cap}]
+        let draft = null;
+        let editingId = null;
+        let filters = { caseName: '', attorney: '', from: '', to: '', conflictsOnly: false };
+        let activeTab = 'log';
+
+        // ── Recording state (ported from the memo recorder) ──
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const CIRC = 2 * Math.PI * 54;
+        let recState = 'idle';
+        let timeLeft = REC_MAX;
+        let rRec = null, rTimer = null, isRecRef = false, finalText = '';
+
+        // ═══════════════ SMALL HELPERS ═══════════════
+        function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+        function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+        function reEsc(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+        function toTitle(s) { return s.replace(/\w\S*/g, t => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()); }
+        function money(n) { return '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+        function round2(n) { return Math.round(n * 100) / 100; }
+
+        function toMin(t) { const p = String(t || '0:00').split(':'); return (+p[0]) * 60 + (+(p[1] || 0)); }
+        function toHHMM(m) { m = Math.max(0, Math.min(1439, Math.round(m))); return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
+        function fmt12(t) {
+            const m = toMin(t); let h = Math.floor(m / 60); const mm = m % 60;
+            const ap = h < 12 ? 'AM' : 'PM'; h = h % 12 || 12;
+            return h + ':' + String(mm).padStart(2, '0') + ' ' + ap;
+        }
+        function hoursBetween(s, e) { return round2(Math.max(0, toMin(e) - toMin(s)) / 60); }
+
+        function isoOf(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+        function todayISO() { return isoOf(new Date()); }
+        function daysAgoISO(n) { const d = new Date(); d.setDate(d.getDate() - n); return isoOf(d); }
+        function fmtDate(iso) { const p = String(iso || '').split('-'); return p.length === 3 ? p[1] + '/' + p[2] + '/' + p[0] : iso; }
+        function daysSince(iso) {
+            const p = String(iso).split('-').map(Number);
+            const then = new Date(p[0], p[1] - 1, p[2]).setHours(0, 0, 0, 0);
+            return Math.floor((new Date().setHours(0, 0, 0, 0) - then) / 86400000);
+        }
+
+        // ═══════════════ CASE BOOK ═══════════════
+        function caseNames() {
+            const s = new Set(caseBook.map(c => c.name));
+            entries.forEach(e => { if (e.caseName) s.add(e.caseName); });
+            return [...s].filter(Boolean).sort();
+        }
+        function attorneyNames() {
+            const s = new Set(caseBook.map(c => c.attorney));
+            entries.forEach(e => { if (e.attorney) s.add(e.attorney); });
+            return [...s].filter(Boolean).sort();
+        }
+        function caseCfg(name) {
+            const c = caseBook.find(x => x.name === name);
             return {
-                id: n.id, name: n.name, content: n.content, priority: n.priority,
-                difficulty: n.difficulty, blocker: n.blocker, blocker_reason: n.blockerReason || '',
-                project: n.project || '', sub_project: n.subProject || '',
-                status: n.status || '', recurring_frequency: n.recurringFrequency || '',
-                created_at: n.timestamp
+                name,
+                attorney: (c && c.attorney) || (entries.find(e => e.caseName === name && e.attorney) || {}).attorney || '',
+                rate: c && c.rate != null ? +c.rate : DEFAULT_RATE,
+                cap: c && c.cap != null ? +c.cap : DEFAULT_CAP
             };
         }
-        function rowToNote(r) {
+        function setCaseField(name, field, value) {
+            let c = caseBook.find(x => x.name === name);
+            if (!c) { c = caseCfg(name); caseBook.push(c); }
+            c[field] = field === 'attorney' ? value : (parseFloat(value) || 0);
+            persist(); renderVouchers();
+        }
+        function ensureCase(name, attorney) {
+            if (!name) return;
+            let c = caseBook.find(x => x.name === name);
+            if (!c) caseBook.push({ name, attorney: attorney || '', rate: DEFAULT_RATE, cap: DEFAULT_CAP });
+            else if (!c.attorney && attorney) c.attorney = attorney;
+        }
+
+        // ═══════════════ PERSISTENCE ═══════════════
+        function entryToRow(e) {
             return {
-                id: r.id, name: r.name, content: r.content, priority: r.priority,
-                difficulty: r.difficulty, blocker: r.blocker, blockerReason: r.blocker_reason || '',
-                project: r.project || '', subProject: r.sub_project || '',
-                status: r.status || '', recurringFrequency: r.recurring_frequency || '',
-                timestamp: r.created_at
+                id: e.id, entry_date: e.date, start_time: e.start, end_time: e.end, hours: e.hours,
+                case_name: e.caseName || '', attorney: e.attorney || '', category: e.category || '',
+                mode: e.mode || 'Out-of-Court', description: e.description || '', rate: e.rate,
+                raw_text: e.raw || '', created_at: e.createdAt
+            };
+        }
+        function rowToEntry(r) {
+            return {
+                id: r.id, date: r.entry_date, start: r.start_time, end: r.end_time, hours: +r.hours || 0,
+                caseName: r.case_name || '', attorney: r.attorney || '', category: r.category || '',
+                mode: r.mode || 'Out-of-Court', description: r.description || '',
+                rate: r.rate != null ? +r.rate : DEFAULT_RATE, raw: r.raw_text || '', createdAt: r.created_at
             };
         }
 
-        async function loadFromCloud() {
-            if (!sb) return;
-            const { data: rows, error } = await sb.from('alfred_notes').select('*').order('created_at', { ascending: false });
-            if (error) return; // keep localStorage data on fetch failure
-            const cloudNotes = rows ? rows.map(rowToNote) : [];
-            if (cloudNotes.length === 0 && notes.length > 0) {
-                // Cloud empty but memos already in this browser → seed the cloud from local.
-                await syncToCloud();
-            } else {
-                // Merge: keep any local-only notes not yet synced, then push them to cloud.
-                const cloudIds = new Set(cloudNotes.map(n => n.id));
-                const localOnly = notes.filter(n => !cloudIds.has(n.id));
-                notes = [...localOnly, ...cloudNotes].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-                if (localOnly.length) syncToCloud();
-            }
-            localStorage.setItem('alfred-notes', JSON.stringify(notes));
-            updateCount(); renderBrowse();
+        function persist() {
+            localStorage.setItem('alfred-entries', JSON.stringify(entries));
+            localStorage.setItem('alfred-cases', JSON.stringify(caseBook));
+            scheduleSync();
         }
-
         function scheduleSync() {
             if (!sb) return;
             clearTimeout(syncTimer);
@@ -621,295 +1049,371 @@
         async function syncToCloud() {
             if (!sb) return;
             try {
-                const rows = notes.map(noteToRow);
-                if (rows.length) await sb.from('alfred_notes').upsert(rows, { onConflict: 'id' });
-                let del = sb.from('alfred_notes').delete();
-                del = notes.length
-                    ? del.not('id', 'in', '(' + notes.map(n => '"' + n.id + '"').join(',') + ')')
-                    : del.neq('id', '');   // no memos left → clear the table
+                const rows = entries.map(entryToRow);
+                if (rows.length) await sb.from(ENTRIES_TABLE).upsert(rows, { onConflict: 'id' });
+                let del = sb.from(ENTRIES_TABLE).delete();
+                del = entries.length
+                    ? del.not('id', 'in', '(' + entries.map(e => '"' + e.id + '"').join(',') + ')')
+                    : del.neq('id', '');
                 await del;
-            } catch (e) { console.error('Cloud sync failed:', e); }
+
+                if (caseBook.length) {
+                    await sb.from(CASES_TABLE).upsert(
+                        caseBook.map(c => ({ name: c.name, attorney: c.attorney || '', rate: c.rate, cap: c.cap })),
+                        { onConflict: 'name' });
+                }
+            } catch (err) { console.error('Cloud sync failed:', err); }
+        }
+        async function loadFromCloud() {
+            if (!sb) return;
+            try {
+                const [er, cr] = await Promise.all([
+                    sb.from(ENTRIES_TABLE).select('*').order('entry_date', { ascending: false }),
+                    sb.from(CASES_TABLE).select('*')
+                ]);
+                if (!er.error) {
+                    const cloud = (er.data || []).map(rowToEntry);
+                    if (cloud.length === 0 && entries.length > 0) {
+                        await syncToCloud();
+                    } else {
+                        const ids = new Set(cloud.map(e => e.id));
+                        const localOnly = entries.filter(e => !ids.has(e.id));
+                        entries = [...localOnly, ...cloud];
+                        if (localOnly.length) scheduleSync();
+                    }
+                }
+                if (!cr.error && cr.data && cr.data.length) {
+                    const byName = new Map(caseBook.map(c => [c.name, c]));
+                    cr.data.forEach(r => {
+                        byName.set(r.name, {
+                            name: r.name, attorney: r.attorney || '',
+                            rate: r.rate != null ? +r.rate : DEFAULT_RATE,
+                            cap: r.cap != null ? +r.cap : DEFAULT_CAP
+                        });
+                    });
+                    caseBook = [...byName.values()];
+                }
+                sortEntries();
+                localStorage.setItem('alfred-entries', JSON.stringify(entries));
+                localStorage.setItem('alfred-cases', JSON.stringify(caseBook));
+                renderAll();
+            } catch (err) { console.error('Cloud load failed:', err); }
         }
 
-        function initSelects() {
-            const pSel = document.getElementById('edit-project');
-            PROJECTS.forEach(p => { const o = document.createElement('option'); o.value = o.textContent = p; pSel.appendChild(o); });
-            const spSel = document.getElementById('edit-sub-project');
-            SUB_PROJECTS.forEach(s => { const o = document.createElement('option'); o.value = o.textContent = s; spSel.appendChild(o); });
+        function sortEntries() {
+            entries.sort((a, b) => (b.date + b.start).localeCompare(a.date + a.start));
         }
 
-        async function initApp() {
-            initSelects();
-            updateCount(); renderBrowse();   // paint from localStorage cache first
-            if (cloudEnabled) await loadFromCloud();
+        // ═══════════════ OVERLAP / CONFLICT ENGINE ═══════════════
+        // Two entries conflict when they fall on the same calendar date and their
+        // [start, end) minute ranges intersect — regardless of which case they belong to.
+        function conflictsFor(e, excludeId) {
+            if (!e || !e.date || !e.start || !e.end) return [];
+            const s = toMin(e.start), en = toMin(e.end);
+            return entries.filter(o => o.id !== excludeId && o.id !== e.id
+                && o.date === e.date && toMin(o.start) < en && s < toMin(o.end));
+        }
+        function conflictIds() {
+            const bad = new Set();
+            for (let i = 0; i < entries.length; i++) {
+                for (let j = i + 1; j < entries.length; j++) {
+                    const a = entries[i], b = entries[j];
+                    if (a.date === b.date && toMin(a.start) < toMin(b.end) && toMin(b.start) < toMin(a.end)) {
+                        bad.add(a.id); bad.add(b.id);
+                    }
+                }
+            }
+            return bad;
+        }
+        // Earliest start at or after fromMin on `date` where a durMin block fits cleanly.
+        function nextFreeSlot(date, durMin, fromMin, excludeId) {
+            const busy = entries.filter(o => o.date === date && o.id !== excludeId)
+                .map(o => [toMin(o.start), toMin(o.end)]).sort((a, b) => a[0] - b[0]);
+            let s = Math.max(0, fromMin), moved = true, guard = 0;
+            while (moved && guard++ < 200) {
+                moved = false;
+                for (const b of busy) {
+                    if (b[0] < s + durMin && s < b[1]) { s = b[1]; moved = true; }
+                }
+                if (s + durMin > 1440) return null;
+            }
+            return s + durMin > 1440 ? null : s;
         }
 
-        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-        const CIRC = 2 * Math.PI * 54;
+        // ═══════════════ NATURAL LANGUAGE PARSER ═══════════════
+        const STOPWORDS = new Set(['regarding', 'about', 'for', 'on', 're', 'the', 'and', 'to', 'in', 'at',
+            'with', 'from', 'case', 'matter', 'file', 'today', 'yesterday', 'this', 'that', 'his', 'her', 'their']);
 
-        let notes = JSON.parse(localStorage.getItem('alfred-notes') || '[]');
-
-        let draft = { name: '', content: '', project: '', subProject: '', status: '', recurringFrequency: '' };
-        let recState = 'idle';
-        let timeLeft = 30;
-        let rRec = null, wRec = null;
-        let rTimer = null, wTimer = null;
-        let isRecRef = false;
-        let finalText = '';
-        let currentStep = null;
-
-        // ── BROWSE NAVIGATION STATE ──
-        const DIMS = [
-            { key: 'project', label: 'Project' },
-            { key: 'subProject', label: 'Sub-Project' },
-            { key: 'status', label: 'Status' },
-            { key: 'priority', label: 'Priority' },
-            { key: 'difficulty', label: 'Difficulty' },
-            { key: 'blocker', label: 'Blocker' },
-            { key: 'recurringFrequency', label: 'Frequency' },
+        const CAT_RULES = [
+            { cat: 'Court Testimony', kws: [/\btestif(y|ied|ying|ies)\b/, /\btestimony\b/, /\bon the stand\b/, /\bhearing\b/, /\btrial\b/, /\bcourtroom\b/, /\bin[- ]court\b/, /\bvoir dire\b/] },
+            { cat: 'Extraction Analysis', kws: [/\bextractions?\b/, /\bcellebrite\b/, /\bgraykey\b/, /\baxiom\b/, /\bufed\b/, /\bphone dump\b/, /\bimaging\b/, /\banaly(z|s)\w*\b/, /\bforensic\b/, /\bparsing\b/] },
+            { cat: 'Discovery Download', kws: [/\bdiscovery\b/, /\bdownload(ing|ed|s)?\b/, /\bupload(ing|ed|s)?\b/, /\bevidence\.com\b/, /\bdropbox\b/, /\busb\b/, /\bhard drive\b/, /\bingest(ing|ed)?\b/] },
+            { cat: 'Report Writing', kws: [/\breports?\b/, /\bdraft(ing|ed|s)?\b/, /\bwrit(e|ing)\b/, /\bwrote\b/, /\baffidavit\b/, /\bdeclaration\b/, /\bsummar(y|ize|izing|ized)\b/, /\bmemo\b/] },
+            { cat: 'Travel', kws: [/\btravel(ing|led|ed)?\b/, /\bdrove\b/, /\bdriving\b/, /\bcommut\w*\b/, /\bmileage\b/] },
+            { cat: 'Phone Call / Conference', kws: [/\bphone call\b/, /\bcall(ed|ing|s)?\b/, /\bconference\b/, /\bzoom\b/, /\bmeeting\b/, /\bmet with\b/, /\bspoke\b/, /\bdiscuss(ed|ion)?\b/, /\bconferr?ed\b/] },
+            { cat: 'File Review', kws: [/\breview(ing|ed|s)?\b/, /\bread(ing)?\b/, /\bexamin(e|ed|ing)\b/, /\bwent through\b/, /\binspect(ing|ed)?\b/] }
         ];
-        const LEVEL_ORDER = { High: 0, Medium: 1, Low: 2, Hard: 0, Easy: 2 };
-        const BLOCKER_ORDER = { Yes: 0, No: 1 };
 
-        let browseDim = 'project';   // which property the navbar groups by
-        let browseSort = 'date-desc'; // how memos are ordered within each group
+        const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+        const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
-        // Combined property filters. Each dim holds an array of accepted values;
-        // an empty array means "all". A memo must match ALL active (non-empty) dims.
-        let filters = { project: [], subProject: [], status: [], priority: [], difficulty: [], blocker: [], recurringFrequency: [] };
-        // Current option list shown per dropdown, so rows can reference values by index.
-        let msOptions = { project: [], subProject: [], status: [], priority: [], difficulty: [], blocker: [], recurringFrequency: [] };
+        function parseDate(low) {
+            if (/\byesterday\b|\blast night\b/.test(low)) return daysAgoISO(1);
+            if (/\bday before yesterday\b/.test(low)) return daysAgoISO(2);
+            if (/\btoday\b|\bthis (morning|afternoon|evening)\b|\bjust now\b/.test(low)) return todayISO();
 
-        function dimLabel(dim) { return (DIMS.find(d => d.key === dim) || {}).label || dim; }
+            let m = low.match(/\b(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?\b/);
+            if (m) {
+                const now = new Date();
+                let y = m[3] ? +m[3] : now.getFullYear();
+                if (y < 100) y += 2000;
+                const d = new Date(y, +m[1] - 1, +m[2]);
+                if (!m[3] && d > now) d.setFullYear(y - 1);   // "3/14" in the future means last year
+                return isoOf(d);
+            }
 
-        // The grouping/filter value of a memo for a given dimension.
-        function dimValue(n, dim) {
-            if (dim === 'project') return n.project || 'Unset';
-            if (dim === 'subProject') return n.subProject || 'Unset';
-            if (dim === 'status') return n.status || 'Unset';
-            if (dim === 'priority') return n.priority || 'Unset';
-            if (dim === 'difficulty') return n.difficulty || 'Unset';
-            if (dim === 'blocker') return n.blocker || 'Unset';
-            if (dim === 'recurringFrequency') return n.recurringFrequency || 'Unset';
+            m = low.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*(\d{4}))?\b/);
+            if (m) {
+                const now = new Date();
+                let y = m[3] ? +m[3] : now.getFullYear();
+                const d = new Date(y, MONTHS[m[1]], +m[2]);
+                if (!m[3] && d > now) d.setFullYear(y - 1);
+                return isoOf(d);
+            }
+
+            m = low.match(/\b(?:last|on|this past)\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/)
+                || low.match(/\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/);
+            if (m) {
+                const want = WEEKDAYS.indexOf(m[1]);
+                const d = new Date();
+                let back = (d.getDay() - want + 7) % 7;
+                if (back === 0) back = 7;                    // "on Monday" on a Monday = last Monday
+                d.setDate(d.getDate() - back);
+                return isoOf(d);
+            }
+
+            m = low.match(/\b(\d{1,2})\s+days?\s+ago\b/);
+            if (m) return daysAgoISO(+m[1]);
+            if (/\ba week ago\b|\blast week\b/.test(low)) return daysAgoISO(7);
+
+            return todayISO();
+        }
+
+        function normalizeDurationWords(low) {
+            return low
+                .replace(/\ban?\s+hour\s+and\s+a\s+half\b/g, '90 minutes')
+                .replace(/\bhour\s+and\s+a\s+half\b/g, '90 minutes')
+                .replace(/\bhalf\s+an?\s+hour\b/g, '30 minutes')
+                .replace(/\ba\s+couple\s+(?:of\s+)?hours\b/g, '2 hours')
+                .replace(/\ban?\s+hour\b/g, '1 hour')
+                .replace(/\bone\b/g, '1').replace(/\btwo\b/g, '2').replace(/\bthree\b/g, '3')
+                .replace(/\bfour\b/g, '4').replace(/\bfive\b/g, '5').replace(/\bsix\b/g, '6')
+                .replace(/\bseven\b/g, '7').replace(/\beight\b/g, '8').replace(/\bnine\b/g, '9')
+                .replace(/\bten\b/g, '10').replace(/\bfifteen\b/g, '15').replace(/\btwenty\b/g, '20')
+                .replace(/\bthirty\b/g, '30').replace(/\bforty[\s-]?five\b/g, '45').replace(/\bforty\b/g, '40')
+                .replace(/\bninety\b/g, '90');
+        }
+
+        function parseDuration(low) {
+            const t = normalizeDurationWords(low);
+            let mins = 0, found = false;
+            let m = t.match(/(\d+(?:\.\d+)?)\s*(?:hours?|hrs?\.?|h)\b/);
+            if (m) { mins += parseFloat(m[1]) * 60; found = true; }
+            m = t.match(/(\d+(?:\.\d+)?)\s*(?:minutes?|mins?\.?)\b/);
+            if (m) { mins += parseFloat(m[1]); found = true; }
+            return found ? Math.max(1, Math.round(mins)) : null;
+        }
+
+        function clockToMin(h, mm, ap) {
+            h = +h; mm = mm ? +mm : 0;
+            if (ap) {
+                const pm = /p/i.test(ap);
+                if (h === 12) h = pm ? 12 : 0;
+                else if (pm) h += 12;
+            } else if (h >= 1 && h <= 7) {
+                h += 12;   // bare "3" during a workday means 3 PM
+            }
+            return (h % 24) * 60 + mm;
+        }
+
+        function parseTimeRange(low) {
+            const T = '(\\d{1,2})(?::(\\d{2}))?\\s*(a\\.?m\\.?|p\\.?m\\.?)?';
+            const re = new RegExp('\\b(?:from\\s+)?' + T + '\\s*(?:to|until|till|through|thru|-|\u2013|\u2014)\\s*' + T, 'i');
+            const m = low.match(re);
+            if (!m) return null;
+            let ap1 = m[3], ap2 = m[6];
+            if (!ap1 && !ap2) { /* both bare — clockToMin heuristic handles it */ }
+            else if (!ap2) ap2 = ap1;
+            else if (!ap1) ap1 = ap2;
+            let s = clockToMin(m[1], m[2], ap1);
+            let e = clockToMin(m[4], m[5], ap2);
+            if (e <= s) e += 720;                       // 10 to 2 → 10:00–14:00
+            if (e <= s || e > 1440) e = Math.min(1440, s + 60);
+            return { start: toHHMM(s), end: toHHMM(Math.min(1439, e)) };
+        }
+
+        function parseStartTime(low) {
+            const m = low.match(/\b(?:at|starting at|start(?:ed|ing)? at|beginning at|from)\s+(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)?/i);
+            if (!m) return null;
+            return clockToMin(m[1], m[2], m[3]);
+        }
+
+        function parseCategory(low) {
+            let best = null, bestScore = 0;
+            CAT_RULES.forEach(rule => {
+                const score = rule.kws.reduce((n, re) => n + (re.test(low) ? 1 : 0), 0);
+                if (score > bestScore) { bestScore = score; best = rule.cat; }
+            });
+            return best || 'Other';
+        }
+
+        // Match a known name loosely: full name, or any distinctive word from it.
+        function knownMatch(list, text) {
+            const low = text.toLowerCase();
+            for (const name of list) {
+                const clean = name.replace(/,?\s*esq\.?/ig, '').trim();
+                if (clean && low.includes(clean.toLowerCase())) return name;
+            }
+            for (const name of list) {
+                const parts = name.replace(/,?\s*esq\.?/ig, '').split(/[\s,]+/).filter(p => p.length >= 4);
+                if (parts.some(p => new RegExp('\\b' + reEsc(p) + '\\b', 'i').test(low))) return name;
+            }
             return '';
         }
 
-        // Only values that actually appear in saved memos, in a sensible order.
-        function dimValuesPresent(dim) {
-            const set = new Set(notes.map(n => dimValue(n, dim)));
-            if (dim === 'priority') return ['High', 'Medium', 'Low', 'Unset'].filter(v => set.has(v));
-            if (dim === 'difficulty') return ['Hard', 'Medium', 'Easy', 'High', 'Low', 'Unset'].filter(v => set.has(v));
-            if (dim === 'blocker') return ['Yes', 'No', 'Unset'].filter(v => set.has(v));
-            if (dim === 'status') return STATUS_OPTIONS.concat(['Unset']).filter(v => set.has(v));
-            if (dim === 'recurringFrequency') return RECUR_OPTIONS.concat(['Unset']).filter(v => set.has(v));
-            return [...set].sort();
+        function parseAttorney(text) {
+            const known = knownMatch(attorneyNames(), text);
+            if (known) return known;
+
+            let m = text.match(/\b([A-Z][A-Za-z'\u2019-]+(?:\s+[A-Z][A-Za-z'\u2019-]+)?)\s*,?\s*Esq\.?/);
+            if (m) return m[1] + ', Esq.';
+
+            m = text.match(/\b(?:attorney|counsel|lawyer|a\.?d\.?a\.?|defender)\s+([A-Za-z][A-Za-z'\u2019-]+(?:\s+[A-Z][A-Za-z'\u2019-]+)?)/i);
+            if (m && !STOPWORDS.has(m[1].split(/\s+/)[0].toLowerCase())) return toTitle(m[1]);
+
+            m = text.match(/\bwith\s+([A-Z][A-Za-z'\u2019-]+(?:\s+[A-Z][A-Za-z'\u2019-]+)?)/);
+            if (m && !STOPWORDS.has(m[1].split(/\s+/)[0].toLowerCase())) return m[1];
+
+            return '';
         }
 
-        function lvlRank(v) { return v in LEVEL_ORDER ? LEVEL_ORDER[v] : 99; }
-        function blkRank(v) { return v in BLOCKER_ORDER ? BLOCKER_ORDER[v] : 99; }
-
-        function sortNotes(arr) {
-            const a = [...arr];
-            const byNew = (x, y) => (y.timestamp || '').localeCompare(x.timestamp || '');
-            if (browseSort === 'date-asc') a.sort((x, y) => (x.timestamp || '').localeCompare(y.timestamp || ''));
-            else if (browseSort === 'priority') a.sort((x, y) => lvlRank(x.priority) - lvlRank(y.priority) || byNew(x, y));
-            else if (browseSort === 'difficulty') a.sort((x, y) => lvlRank(x.difficulty) - lvlRank(y.difficulty) || byNew(x, y));
-            else if (browseSort === 'blocker') a.sort((x, y) => blkRank(x.blocker) - blkRank(y.blocker) || byNew(x, y));
-            else a.sort(byNew); // date-desc (default)
-            return a;
-        }
-
-        function onSortChange() {
-            browseSort = document.getElementById('sort-select').value;
-            renderBrowse();
-        }
-
-        // ── COMBINED FILTERS (multi-select) ──
-        function escHtml(s) {
-            return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-        }
-
-        // Short text for a dropdown button given its current selection.
-        function msLabel(dim) {
-            const v = filters[dim];
-            if (!v.length) return 'All';
-            if (v.length === 1) return v[0];
-            return v.length + ' selected';
-        }
-
-        function fillFilterSelect(dim, values) {
-            // Drop any previously-selected values that no longer exist.
-            filters[dim] = filters[dim].filter(x => values.includes(x));
-            msOptions[dim] = values;
-
-            const wrap = document.getElementById('ms-' + dim);
-            wrap.querySelector('.ms-text').textContent = msLabel(dim);
-
-            const panel = document.getElementById('ms-panel-' + dim);
-            if (!values.length) {
-                panel.innerHTML = '<div style="padding:8px 9px;font-size:12px;color:var(--dim)">No options</div>';
-                return;
+        function parseCase(text, attorney) {
+            // Don't let the attorney's name be mistaken for the case name.
+            let t = text;
+            if (attorney) {
+                attorney.replace(/,?\s*esq\.?/ig, '').split(/\s+/).forEach(p => {
+                    if (p.length >= 3) t = t.replace(new RegExp('\\b' + reEsc(p) + '\\b', 'g'), ' ');
+                });
             }
-            panel.innerHTML = values.map((v, i) => {
-                const sel = filters[dim].includes(v);
-                return `<div class="ms-row${sel ? ' sel' : ''}" data-dim="${dim}" data-idx="${i}">`
-                    + `<span class="ms-check">${sel ? '✓' : ''}</span><span>${escHtml(v)}</span></div>`;
-            }).join('');
+
+            const known = knownMatch(caseNames(), t);
+            if (known) return known;
+
+            let m = t.match(/\b(?:the\s+)?([A-Z][A-Za-z'\u2019-]+(?:\s+[A-Z][A-Za-z'\u2019-]+){0,2})\s+(?:case|matter|file|docket)\b/);
+            if (m) return m[1];
+
+            m = t.match(/\b(?:case|matter|defendant|client|docket)\s+(?:of\s+|named\s+|for\s+)?([A-Za-z][A-Za-z'\u2019-]+(?:\s+[A-Za-z][A-Za-z'\u2019-]+)?)/i);
+            if (m && !STOPWORDS.has(m[1].split(/\s+/)[0].toLowerCase())) return toTitle(m[1]);
+
+            m = t.match(/\b(?:for|on|re:?|regarding|about|in)\s+(?:the\s+)?([A-Z][A-Za-z'\u2019-]+\s+[A-Z][A-Za-z'\u2019-]+)/);
+            if (m) return m[1];
+
+            m = t.match(/\b(?:for|on|re:?|regarding|about)\s+(?:the\s+)?([A-Z][A-Za-z'\u2019-]{2,})\b/);
+            if (m && !STOPWORDS.has(m[1].toLowerCase())) return m[1];
+
+            return '';
         }
 
-        function renderFilters() {
-            fillFilterSelect('project', dimValuesPresent('project'));
-            fillFilterSelect('subProject', dimValuesPresent('subProject'));
-            fillFilterSelect('status', dimValuesPresent('status'));
-            fillFilterSelect('priority', dimValuesPresent('priority'));
-            fillFilterSelect('difficulty', dimValuesPresent('difficulty'));
-            fillFilterSelect('blocker', dimValuesPresent('blocker'));
-            fillFilterSelect('recurringFrequency', dimValuesPresent('recurringFrequency'));
+        function buildNarrative(text) {
+            let s = text.trim()
+                .replace(/^(?:um|uh|so|okay|ok|alright|hey)[,\s]+/i, '')
+                .replace(/^(?:i\s+)?just\s+(?:spent|finished|did|got\s+done(?:\s+with)?)\s+/i, '')
+                .replace(/^(?:about\s+|roughly\s+|around\s+)?(?:\d+(?:\.\d+)?|an?|half\s+an?)\s*(?:hours?|hrs?\.?|minutes?|mins?\.?)(?:\s+and\s+a\s+half)?\s+(?=[a-z])/i, '')
+                .replace(/\s+/g, ' ');
+            if (!s) return '';
+            s = s.charAt(0).toUpperCase() + s.slice(1);
+            if (!/[.!?]$/.test(s)) s += '.';
+            return s;
+        }
 
-            const active = Object.entries(filters).filter(([, v]) => v.length);
-            const summary = document.getElementById('filter-summary');
-            const clearBtn = document.getElementById('clear-filters-btn');
-            if (active.length) {
-                summary.style.display = 'block';
-                summary.textContent = 'Showing: ' + active.map(([k, v]) => `${dimLabel(k)} = ${v.join(', ')}`).join('  ·  ');
-                clearBtn.style.display = 'block';
+        // Turn free text into a draft entry. Never throws — unknown fields come
+        // back empty for the user to fill in on the review form.
+        function parseEntry(text) {
+            const raw = String(text || '').trim();
+            const low = ' ' + raw.toLowerCase().replace(/\s+/g, ' ') + ' ';
+
+            const date = parseDate(low);
+            const range = parseTimeRange(low);
+            const dur = parseDuration(low);
+            const startAt = parseStartTime(low);
+
+            let start, end;
+            if (range) {
+                start = range.start; end = range.end;
+            } else if (startAt != null) {
+                const d = dur || 60;
+                start = toHHMM(startAt);
+                end = toHHMM(Math.min(1439, startAt + d));
             } else {
-                summary.style.display = 'none';
-                clearBtn.style.display = 'none';
+                const d = dur || 60;
+                // No clock reference: anchor the block so it ENDS at "now" for today,
+                // or at 5:00 PM for a past date.
+                let endMin;
+                if (date === todayISO()) {
+                    const now = new Date();
+                    endMin = Math.floor((now.getHours() * 60 + now.getMinutes()) / 5) * 5;
+                } else {
+                    endMin = 17 * 60;
+                }
+                if (endMin - d < 0) endMin = d;
+                start = toHHMM(endMin - d);
+                end = toHHMM(endMin);
             }
+
+            const attorney = parseAttorney(raw);
+            const caseName = parseCase(raw, attorney);
+            const cfg = caseName ? caseCfg(caseName) : null;
+
+            return {
+                id: uid(),
+                date, start, end,
+                hours: hoursBetween(start, end),
+                caseName,
+                attorney: attorney || (cfg ? cfg.attorney : ''),
+                category: parseCategory(low),
+                mode: /\bin[- ]court\b|\bcourtroom\b|\bon the stand\b|\btestif\w*\b|\bhearing\b|\btrial\b|\bbefore the (judge|court)\b/.test(low)
+                    ? 'In-Court' : 'Out-of-Court',
+                description: buildNarrative(raw),
+                rate: cfg ? cfg.rate : DEFAULT_RATE,
+                raw,
+                createdAt: new Date().toISOString()
+            };
         }
 
-        // Toggle a single value within a dimension's selection.
-        function toggleFilterValue(dim, value) {
-            const arr = filters[dim];
-            const i = arr.indexOf(value);
-            if (i === -1) arr.push(value); else arr.splice(i, 1);
-            renderBrowse();
-        }
-
-        function openMsDropdown(dim) {
-            document.querySelectorAll('.ms').forEach(el => el.classList.toggle('open', el.id === 'ms-' + dim && !el.classList.contains('open')));
-        }
-
-        function closeMsDropdowns() {
-            document.querySelectorAll('.ms.open').forEach(el => el.classList.remove('open'));
-        }
-
-        // Delegated handlers: open/close dropdowns and toggle option rows.
-        document.addEventListener('click', e => {
-            const btn = e.target.closest('.ms-btn');
-            const row = e.target.closest('.ms-row');
-            if (btn) {
-                openMsDropdown(btn.dataset.ms);
-                return;
-            }
-            if (row) {
-                const dim = row.dataset.dim;
-                toggleFilterValue(dim, msOptions[dim][+row.dataset.idx]);
-                return; // keep the panel open for further multi-selection
-            }
-            if (!e.target.closest('.ms')) closeMsDropdowns();
-        });
-
-        function clearFilters() {
-            filters = { project: [], subProject: [], status: [], priority: [], difficulty: [], blocker: [], recurringFrequency: [] };
-            renderBrowse();
-        }
-
-        function matchesFilters(n) {
-            return Object.keys(filters).every(dim =>
-                !filters[dim].length || filters[dim].includes(dimValue(n, dim)));
-        }
-
-        // ── PROPERTY BADGES ──
-        function levelColor(v) {
-            if (v === 'High' || v === 'Hard') return { bg: 'rgba(244,63,94,0.12)', fg: 'var(--red)', bd: 'rgba(244,63,94,0.3)' };
-            if (v === 'Medium') return { bg: 'rgba(245,158,11,0.12)', fg: 'var(--warn)', bd: 'rgba(245,158,11,0.3)' };
-            if (v === 'Low' || v === 'Easy') return { bg: 'var(--aglo)', fg: 'var(--accent)', bd: 'rgba(124,106,247,0.3)' };
-            return { bg: 'var(--surf2)', fg: 'var(--dim)', bd: 'var(--bdr)' };
-        }
-        function blockerColor(v) {
-            if (v === 'Yes') return { bg: 'rgba(244,63,94,0.12)', fg: 'var(--red)', bd: 'rgba(244,63,94,0.3)' };
-            if (v === 'No') return { bg: 'rgba(16,185,129,0.12)', fg: '#10b981', bd: 'rgba(16,185,129,0.3)' };
-            return { bg: 'var(--surf2)', fg: 'var(--dim)', bd: 'var(--bdr)' };
-        }
-        function statusColor(v) {
-            if (v === 'Doing') return { bg: 'rgba(124,106,247,0.12)', fg: 'var(--accent)', bd: 'rgba(124,106,247,0.3)' };
-            if (v === 'Done') return { bg: 'rgba(16,185,129,0.12)', fg: '#10b981', bd: 'rgba(16,185,129,0.3)' };
-            if (v === 'To Do') return { bg: 'rgba(244,63,94,0.08)', fg: 'var(--red)', bd: 'rgba(244,63,94,0.25)' };
-            if (v === 'On Hold') return { bg: 'rgba(245,158,11,0.12)', fg: 'var(--warn)', bd: 'rgba(245,158,11,0.3)' };
-            if (v === 'Scheduled') return { bg: 'rgba(139,92,246,0.12)', fg: '#8b5cf6', bd: 'rgba(139,92,246,0.3)' };
-            return { bg: 'var(--surf2)', fg: 'var(--dim)', bd: 'var(--bdr)' };
-        }
-        function badgesHTML(n) {
-            const chip = (label, val, c) => !val ? '' :
-                `<span style="font-size:10px;padding:2px 8px;border-radius:20px;background:${c.bg};color:${c.fg};border:1px solid ${c.bd}">${label}: ${val}</span>`;
-            const tag = val => !val ? '' :
-                `<span style="font-size:10px;padding:2px 8px;border-radius:20px;background:var(--surf2);color:var(--dim);border:1px solid var(--bdr)">${escHtml(val)}</span>`;
-            return chip('Status', n.status, statusColor(n.status))
-                + tag(n.project)
-                + tag(n.subProject)
-                + chip('Priority', n.priority, levelColor(n.priority))
-                + chip('Difficulty', n.difficulty, levelColor(n.difficulty))
-                + chip('Blocker', n.blocker, blockerColor(n.blocker))
-                + (n.recurringFrequency ? `<span style="font-size:10px;padding:2px 8px;border-radius:20px;background:var(--surf2);color:var(--dim);border:1px solid var(--bdr)">↺ ${escHtml(n.recurringFrequency)}</span>` : '');
-        }
-
-        function persist() {
-            localStorage.setItem('alfred-notes', JSON.stringify(notes));
-            scheduleSync();
-        }
-
-        function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
-        function toTitle(s) { return s.replace(/\w\S*/g, t => t.charAt(0).toUpperCase() + t.slice(1)); }
-        function fmt(iso) {
-            const d = new Date(iso);
-            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' · ' +
-                d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-        }
-
-        function speak(text) {
-            try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.rate = 1.05; speechSynthesis.speak(u); } catch (_) { }
-        }
-
-        // ── TAB SWITCHING ──
-        function switchTab(tab) {
-            document.getElementById('view-record').classList.toggle('hidden', tab !== 'record');
-            document.getElementById('view-browse').classList.toggle('hidden', tab !== 'browse');
-            document.getElementById('tab-record').style.background = tab === 'record' ? 'var(--accent)' : 'transparent';
-            document.getElementById('tab-record').style.color = tab === 'record' ? '#fff' : 'var(--dim)';
-            document.getElementById('tab-record').style.fontWeight = tab === 'record' ? '600' : '400';
-            document.getElementById('tab-browse').style.background = tab === 'browse' ? 'var(--accent)' : 'transparent';
-            document.getElementById('tab-browse').style.color = tab === 'browse' ? '#fff' : 'var(--dim)';
-            document.getElementById('tab-browse').style.fontWeight = tab === 'browse' ? '600' : '400';
-            if (tab === 'browse') renderBrowse();
-        }
-
-        // ── RECORDING ──
+        // ═══════════════ VOICE RECORDING ═══════════════
         function toggleRec() {
             if (recState === 'rec') doStop();
             else if (recState === 'idle') startRec();
         }
 
         function startRec() {
-            if (!SR) { showError('Speech recognition requires Chrome or Edge.'); return; }
+            if (!SR) { showError('Speech recognition requires Chrome or Edge. You can still type the entry below.'); return; }
             setRecState('starting');
-            finalText = ''; draft.content = '';
-            document.getElementById('live-box').style.display = 'none';
+            finalText = '';
+            document.getElementById('live-box').classList.add('hidden');
             document.getElementById('live-text').textContent = '';
-            document.getElementById('how-it-works').style.display = 'none';
-            document.getElementById('rec-error').style.display = 'none';
+            document.getElementById('rec-error').classList.add('hidden');
 
             const r = new SR();
             r.continuous = true; r.interimResults = true; r.lang = 'en-US';
 
             r.onstart = () => {
                 setRecState('rec');
-                timeLeft = 30;
+                timeLeft = REC_MAX;
                 rTimer = setInterval(() => {
                     timeLeft--;
                     document.getElementById('timer-display').textContent = timeLeft + 's';
-                    document.getElementById('ring-progress').style.strokeDashoffset = CIRC - (timeLeft / 30) * CIRC;
+                    document.getElementById('ring-progress').style.strokeDashoffset = CIRC - (timeLeft / REC_MAX) * CIRC;
                     if (timeLeft <= 0) doStop();
                 }, 1000);
             };
@@ -921,8 +1425,7 @@
                     else i += e.results[j][0].transcript;
                 }
                 finalText = f;
-                const box = document.getElementById('live-box');
-                box.style.display = 'block';
+                document.getElementById('live-box').classList.remove('hidden');
                 document.getElementById('live-text').textContent = f + i;
             };
 
@@ -934,10 +1437,10 @@
                 rRec = null;
                 setRecState('idle');
                 const msgs = {
-                    'not-allowed': 'Microphone access denied. Click the 🔒 or 🎙 icon in your browser address bar and allow microphone access for this file, then refresh.',
-                    'no-speech': 'No speech detected. Tap record and speak clearly.',
+                    'not-allowed': 'Microphone access denied. Click the lock or mic icon in your browser address bar, allow microphone access for this page, then refresh.',
+                    'no-speech': 'No speech detected. Tap record and speak clearly.'
                 };
-                showError(msgs[e.error] || `Recognition error: ${e.error}. Ensure you\'re using Chrome or Edge.`);
+                showError(msgs[e.error] || ('Recognition error: ' + e.error + '. Make sure you are using Chrome or Edge.'));
             };
 
             rRec = r; isRecRef = true;
@@ -952,17 +1455,12 @@
             clearInterval(rTimer);
             if (rRec) { try { rRec.onend = null; rRec.stop(); } catch (_) { } rRec = null; }
             const content = finalText.trim();
+            setRecState('idle');
             if (!content) {
-                setRecState('idle');
                 showError('Nothing was transcribed. Make sure your microphone is working and speak clearly.');
-                document.getElementById('how-it-works').style.display = 'block';
                 return;
             }
-            draft = { name: '', content, project: '', subProject: '', status: '', recurringFrequency: '' };
-            setRecState('done');
-            document.getElementById('rec-idle').classList.add('hidden');
-            document.getElementById('wizard').classList.remove('hidden');
-            showStep('name');
+            openReview(parseEntry(content));
         }
 
         function setRecState(state) {
@@ -972,320 +1470,703 @@
             const timer = document.getElementById('timer-display');
             const label = document.getElementById('rec-label');
             const sub = document.getElementById('rec-sub');
+            btn.classList.remove('rec', 'starting');
 
             if (state === 'idle') {
-                btn.style.background = 'var(--accent)'; btn.style.boxShadow = '0 0 36px rgba(124,106,247,0.25)'; btn.textContent = '🎙';
-                ring.style.display = 'none'; timer.style.display = 'none'; sub.style.display = 'none';
-                label.textContent = 'Tap to start recording'; label.style.color = 'var(--dim)';
+                btn.textContent = '🎤';
+                ring.classList.add('hidden'); timer.classList.add('hidden'); sub.classList.add('hidden');
+                label.textContent = 'Tap to dictate a time entry';
+                label.style.color = 'var(--dim)';
             } else if (state === 'starting') {
-                btn.style.background = 'var(--warn)'; btn.style.boxShadow = '0 0 36px rgba(245,158,11,0.3)'; btn.textContent = '⏳';
-                ring.style.display = 'none'; timer.style.display = 'none'; sub.style.display = 'none';
-                label.textContent = 'Requesting mic access…'; label.style.color = 'var(--warn)';
+                btn.classList.add('starting'); btn.textContent = '⏳';
+                ring.classList.add('hidden'); timer.classList.add('hidden'); sub.classList.add('hidden');
+                label.textContent = 'Requesting mic access…';
+                label.style.color = 'var(--warn)';
             } else if (state === 'rec') {
-                btn.style.background = 'var(--red)'; btn.style.boxShadow = '0 0 36px rgba(244,63,94,0.35)'; btn.textContent = '⏹';
-                ring.style.display = 'block'; ring.style.strokeDashoffset = CIRC;
-                timer.style.display = 'block'; timer.textContent = '30s';
-                sub.style.display = 'block'; label.textContent = 'Recording — tap to stop'; label.style.color = 'var(--dim)';
+                btn.classList.add('rec'); btn.textContent = '⏹';
+                ring.classList.remove('hidden'); ring.style.strokeDashoffset = CIRC;
+                timer.classList.remove('hidden'); timer.textContent = REC_MAX + 's';
+                sub.classList.remove('hidden');
+                label.textContent = 'Recording — tap to stop';
+                label.style.color = 'var(--red)';
             }
         }
 
         function showError(msg) {
             const el = document.getElementById('rec-error');
-            el.style.display = 'block'; el.textContent = msg;
+            el.classList.remove('hidden');
+            el.innerHTML = '<div class="ico">⚠</div><div class="body">' + esc(msg) + '</div>';
         }
 
-        // ── WIZARD ──
-        function showStep(s) {
-            currentStep = s;
-            ['name', 'confirm'].forEach(x => {
-                document.getElementById('step-' + x).classList.toggle('hidden', x !== s);
+        function parseTyped() {
+            const ta = document.getElementById('text-input');
+            const txt = ta.value.trim();
+            if (!txt) { showError('Type what you worked on, or tap the mic to dictate it.'); return; }
+            document.getElementById('rec-error').classList.add('hidden');
+            openReview(parseEntry(txt));
+        }
+
+        function useExample(i) {
+            document.getElementById('text-input').value = EXAMPLES[i];
+            parseTyped();
+        }
+
+        function renderChips() {
+            document.getElementById('chips').innerHTML = EXAMPLES
+                .map((x, i) => '<button class="chip" onclick="useExample(' + i + ')">' + esc(x) + '</button>').join('');
+        }
+
+        // ═══════════════ REVIEW FORM ═══════════════
+        function selectHTML(id, options, value) {
+            return '<select id="' + id + '" class="inp" oninput="onReviewChange()">' +
+                options.map(o => '<option' + (o === value ? ' selected' : '') + '>' + esc(o) + '</option>').join('') +
+                '</select>';
+        }
+
+        function buildReviewForm() {
+            const d = draft;
+            document.getElementById('r-form').innerHTML =
+                '<div class="field"><label for="r-case">Case / defendant</label>' +
+                '<input id="r-case" class="inp" list="dl-cases" value="' + esc(d.caseName) + '" placeholder="e.g. Douglas Zimbler" oninput="onReviewChange()"></div>' +
+                '<div class="field"><label for="r-attorney">Attorney / retaining counsel</label>' +
+                '<input id="r-attorney" class="inp" list="dl-attorneys" value="' + esc(d.attorney) + '" placeholder="e.g. Gloria Keum, Esq." oninput="onReviewChange()"></div>' +
+                '<div class="field"><label for="r-date">Date</label>' +
+                '<input id="r-date" type="date" class="inp" value="' + esc(d.date) + '" oninput="onReviewChange()"></div>' +
+                '<div class="field"><label for="r-start">Start time</label>' +
+                '<input id="r-start" type="time" class="inp" value="' + esc(d.start) + '" oninput="onReviewChange()"></div>' +
+                '<div class="field"><label for="r-end">End time</label>' +
+                '<input id="r-end" type="time" class="inp" value="' + esc(d.end) + '" oninput="onReviewChange()"></div>' +
+                '<div class="field"><label>Hours</label><div class="readout" id="r-hours">' + d.hours.toFixed(2) + '</div></div>' +
+                '<div class="field"><label for="r-category">Activity type</label>' + selectHTML('r-category', CATEGORIES, d.category) + '</div>' +
+                '<div class="field"><label for="r-mode">Location</label>' + selectHTML('r-mode', MODES, d.mode) + '</div>' +
+                '<div class="field"><label for="r-rate">Rate ($/hr)</label>' +
+                '<input id="r-rate" type="number" min="0" step="5" class="inp" value="' + d.rate + '" oninput="onReviewChange()"></div>' +
+                '<div class="field"><label>Amount</label><div class="readout" id="r-amount">' + money(d.hours * d.rate) + '</div></div>' +
+                '<div class="field wide"><label for="r-desc">Narrative description (appears on the voucher)</label>' +
+                '<textarea id="r-desc" class="inp" oninput="onReviewChange()">' + esc(d.description) + '</textarea></div>';
+        }
+
+        function readReview() {
+            const start = document.getElementById('r-start').value || '09:00';
+            const end = document.getElementById('r-end').value || '10:00';
+            return Object.assign({}, draft, {
+                caseName: document.getElementById('r-case').value.trim(),
+                attorney: document.getElementById('r-attorney').value.trim(),
+                date: document.getElementById('r-date').value || todayISO(),
+                start, end,
+                hours: hoursBetween(start, end),
+                category: document.getElementById('r-category').value,
+                mode: document.getElementById('r-mode').value,
+                rate: parseFloat(document.getElementById('r-rate').value) || 0,
+                description: document.getElementById('r-desc').value.trim()
             });
-            // progress bars
-            const bars = document.querySelectorAll('.prog-bar');
-            const idx = ['name', 'confirm'].indexOf(s);
-            bars.forEach((b, i) => { b.style.background = i <= idx ? 'var(--accent)' : 'var(--bdr)'; });
+        }
 
-            if (s === 'confirm') renderConfirm();
-            if (s !== 'confirm') {
-                const tp = document.getElementById('transcript-preview-' + s);
-                if (tp && draft.content) {
-                    tp.classList.remove('hidden');
-                    document.getElementById('tp-' + s + '-text').textContent = draft.content;
+        function onReviewChange() {
+            draft = readReview();
+            document.getElementById('r-hours').textContent = draft.hours.toFixed(2);
+            document.getElementById('r-amount').textContent = money(draft.hours * draft.rate);
+            renderReviewWarnings();
+        }
+
+        function renderReviewWarnings() {
+            // ── Overlap ──
+            const box = document.getElementById('r-conflict');
+            const bad = conflictsFor(draft, draft.id);
+            if (toMin(draft.end) <= toMin(draft.start)) {
+                box.classList.remove('hidden');
+                box.innerHTML = '<div class="ico">⚠</div><div class="body"><strong>End time must be after start time</strong>' +
+                    'Adjust the times before saving.</div>';
+            } else if (bad.length) {
+                const list = bad.map(b => esc(b.caseName || 'Untitled') + ' · ' + fmt12(b.start) + '–' + fmt12(b.end)).join('; ');
+                box.classList.remove('hidden');
+                box.innerHTML = '<div class="ico">⚠</div><div class="body"><strong>Time conflict on ' + fmtDate(draft.date) + '</strong>' +
+                    'This block overlaps ' + bad.length + ' existing ' + (bad.length === 1 ? 'entry' : 'entries') + ': ' + list +
+                    '. Court audit clerks reject vouchers with overlapping intervals.</div>' +
+                    '<button class="btn btn-sm" onclick="autoShift()">Auto-shift to next free slot</button>';
+            } else {
+                box.classList.add('hidden');
+            }
+
+            // ── Cap ──
+            const capBox = document.getElementById('r-cap');
+            if (draft.caseName) {
+                const cfg = caseCfg(draft.caseName);
+                const already = caseTotals(draft.caseName).amount;
+                const after = already + draft.hours * draft.rate;
+                if (after > cfg.cap) {
+                    capBox.classList.remove('hidden');
+                    capBox.innerHTML = '<div class="ico">⚑</div><div class="body"><strong>Saving this puts ' + esc(draft.caseName) + ' over its voucher cap</strong>' +
+                        money(after) + ' billed against a ' + money(cfg.cap) + ' cap (' + money(after - cfg.cap) + ' over). ' +
+                        'An Over-Cap Affirmation will be required — generate it from the Vouchers tab.</div>';
+                } else {
+                    capBox.classList.add('hidden');
                 }
-            }
-
-            if (s === 'name') setTimeout(() => speak('What should I name this memo?'), 300);
-        }
-
-        function nextStep(s) {
-            if (s === 'name') {
-                const v = document.getElementById('draft-name').value.trim();
-                if (v) draft.name = v;
-                showStep('confirm');
+            } else {
+                capBox.classList.add('hidden');
             }
         }
 
-        function renderConfirm() {
-            document.getElementById('confirm-name').textContent = draft.name || 'Untitled';
-            document.getElementById('confirm-content').textContent = draft.content || '(no transcript captured)';
+        function autoShift() {
+            const dur = toMin(draft.end) - toMin(draft.start);
+            const slot = nextFreeSlot(draft.date, dur, toMin(draft.start), draft.id);
+            if (slot == null) {
+                alert('No free block of ' + (dur / 60).toFixed(2) + ' hours left on ' + fmtDate(draft.date) + '. Try another date.');
+                return;
+            }
+            document.getElementById('r-start').value = toHHMM(slot);
+            document.getElementById('r-end').value = toHHMM(slot + dur);
+            onReviewChange();
         }
 
-        function saveMemo() {
-            notes.unshift({ id: uid(), ...draft, name: draft.name || 'Untitled', priority: 'Medium', difficulty: 'Medium', blocker: 'No', status: draft.status || 'To Do', timestamp: new Date().toISOString() });
-            persist(); updateCount();
-            try { speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance('Memo saved.')); } catch (_) { }
-            discardMemo(); switchTab('browse');
+        function openReview(d) {
+            draft = d;
+            document.getElementById('capture').classList.add('hidden');
+            document.getElementById('review').classList.remove('hidden');
+            buildReviewForm();
+            const rawBox = document.getElementById('r-raw');
+            if (d.raw) {
+                rawBox.classList.remove('hidden');
+                document.getElementById('r-raw-text').textContent = d.raw;
+            } else { rawBox.classList.add('hidden'); }
+            renderReviewWarnings();
+            switchTab('log');
         }
 
-        function importMemos() {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = 'application/json,.json';
-            input.onchange = (e) => {
-                const file = e.target.files && e.target.files[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (ev) => {
-                    let data;
-                    try { data = JSON.parse(ev.target.result); }
-                    catch (err) { alert('Could not parse the file as JSON.\n\n' + err.message); return; }
-                    if (!data || data.app !== 'Alfred' || !Array.isArray(data.notes)) {
-                        alert('This does not look like an Alfred export. Expected { "app": "Alfred", "notes": [...] }.');
-                        return;
-                    }
-                    const incoming = data.notes.filter(n => n && typeof n === 'object');
-                    const existingIds = new Set(notes.map(n => n.id));
-                    const newNotes = incoming.filter(n => n.id && !existingIds.has(n.id));
-                    const skipped = incoming.length - newNotes.length;
-                    const msg = `Found ${incoming.length} memo${incoming.length !== 1 ? 's' : ''} in the file.\n`
-                        + `• ${newNotes.length} new (will be added)\n`
-                        + `• ${skipped} already exist (will be skipped)\n\nImport now?`;
-                    if (!confirm(msg)) return;
+        function discardDraft() {
+            draft = null;
+            document.getElementById('review').classList.add('hidden');
+            document.getElementById('capture').classList.remove('hidden');
+            document.getElementById('text-input').value = '';
+            document.getElementById('live-box').classList.add('hidden');
+            document.getElementById('live-text').textContent = '';
+            finalText = '';
+        }
 
-                    notes = [...newNotes, ...notes].sort((a, b) =>
-                        (b.timestamp || '').localeCompare(a.timestamp || ''));
+        function saveDraft() {
+            draft = readReview();
+            if (!draft.caseName) { alert('Enter a case / defendant name — vouchers are filed per case.'); return; }
+            if (toMin(draft.end) <= toMin(draft.start)) { alert('End time must be after start time.'); return; }
+            ensureCase(draft.caseName, draft.attorney);
+            entries.push(draft);
+            sortEntries();
+            persist();
+            const saved = draft.caseName;
+            discardDraft();
+            renderAll();
+            switchTab('entries');
+            flashHeader('Entry saved to ' + saved);
+        }
 
-                    persist();
-                    updateCount();
-                    if (typeof renderBrowse === 'function') renderBrowse();
-                    alert(`Imported ${newNotes.length} memo${newNotes.length !== 1 ? 's' : ''}.`);
-                    switchTab('browse');
-                };
-                reader.onerror = () => alert('Could not read the file.');
-                reader.readAsText(file);
+        function flashHeader(msg) {
+            const el = document.getElementById('hdr-sub');
+            el.textContent = msg;
+            el.style.color = 'var(--ok)';
+            setTimeout(() => { el.style.color = ''; updateHeader(); }, 2600);
+        }
+
+        // ═══════════════ TOTALS ═══════════════
+        function caseTotals(name) {
+            const list = entries.filter(e => e.caseName === name);
+            const hours = round2(list.reduce((n, e) => n + e.hours, 0));
+            const amount = round2(list.reduce((n, e) => n + e.hours * e.rate, 0));
+            return { list, hours, amount, count: list.length };
+        }
+
+        function caseFlags(name) {
+            const cfg = caseCfg(name);
+            const t = caseTotals(name);
+            const byDay = {};
+            t.list.forEach(e => { byDay[e.date] = round2((byDay[e.date] || 0) + e.hours); });
+            const heavyDays = Object.keys(byDay).filter(d => byDay[d] > DAY_HOURS_LIMIT)
+                .sort().map(d => ({ date: d, hours: byDay[d] }));
+            const oldest = t.list.length ? t.list.map(e => e.date).sort()[0] : null;
+            const age = oldest ? daysSince(oldest) : 0;
+            return {
+                cfg, totals: t, heavyDays, oldest, age,
+                overCap: t.amount > cfg.cap,
+                overBilling: heavyDays.length > 0,
+                delay: age > DELAY_DAYS
             };
-            input.click();
         }
 
-        function exportMemos() {
-            if (notes.length === 0) { alert('No memos to export yet.'); return; }
-            const payload = {
-                app: 'Alfred',
-                version: 1,
-                exportedAt: new Date().toISOString(),
-                notes: notes
-            };
-            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+        // ═══════════════ TABS & RENDER ═══════════════
+        function switchTab(tab) {
+            activeTab = tab;
+            ['log', 'entries', 'vouchers'].forEach(t => {
+                document.getElementById('view-' + t).classList.toggle('hidden', t !== tab);
+                document.getElementById('tab-' + t).classList.toggle('active', t === tab);
+            });
+            if (tab === 'entries') renderEntries();
+            if (tab === 'vouchers') renderVouchers();
+        }
+
+        function updateHeader() {
+            const t = round2(entries.reduce((n, e) => n + e.hours, 0));
+            const amt = entries.reduce((n, e) => n + e.hours * e.rate, 0);
+            document.getElementById('hdr-sub').textContent =
+                entries.length === 0 ? 'Voucher time tracker'
+                    : entries.length + ' ' + (entries.length === 1 ? 'entry' : 'entries') + ' · ' +
+                    t.toFixed(2) + ' hrs · ' + money(amt);
+        }
+
+        function buildDatalists() {
+            let dl = document.getElementById('alfred-datalists');
+            if (!dl) {
+                dl = document.createElement('div');
+                dl.id = 'alfred-datalists';
+                document.body.appendChild(dl);
+            }
+            dl.innerHTML =
+                '<datalist id="dl-cases">' + caseNames().map(n => '<option value="' + esc(n) + '">').join('') + '</datalist>' +
+                '<datalist id="dl-attorneys">' + attorneyNames().map(n => '<option value="' + esc(n) + '">').join('') + '</datalist>';
+        }
+
+        function refreshFilterSelects() {
+            const cs = document.getElementById('f-case'), as = document.getElementById('f-attorney');
+            cs.innerHTML = '<option value="">All cases</option>' +
+                caseNames().map(n => '<option' + (n === filters.caseName ? ' selected' : '') + '>' + esc(n) + '</option>').join('');
+            as.innerHTML = '<option value="">All attorneys</option>' +
+                attorneyNames().map(n => '<option' + (n === filters.attorney ? ' selected' : '') + '>' + esc(n) + '</option>').join('');
+            document.getElementById('f-from').value = filters.from;
+            document.getElementById('f-to').value = filters.to;
+            document.getElementById('f-conflicts').checked = filters.conflictsOnly;
+        }
+
+        function onFilterChange() {
+            filters.caseName = document.getElementById('f-case').value;
+            filters.attorney = document.getElementById('f-attorney').value;
+            filters.from = document.getElementById('f-from').value;
+            filters.to = document.getElementById('f-to').value;
+            filters.conflictsOnly = document.getElementById('f-conflicts').checked;
+            renderEntries();
+        }
+
+        function clearFilters() {
+            filters = { caseName: '', attorney: '', from: '', to: '', conflictsOnly: false };
+            refreshFilterSelects();
+            renderEntries();
+        }
+
+        function filteredEntries() {
+            const bad = conflictIds();
+            return entries.filter(e => {
+                if (filters.caseName && e.caseName !== filters.caseName) return false;
+                if (filters.attorney && e.attorney !== filters.attorney) return false;
+                if (filters.from && e.date < filters.from) return false;
+                if (filters.to && e.date > filters.to) return false;
+                if (filters.conflictsOnly && !bad.has(e.id)) return false;
+                return true;
+            });
+        }
+
+        function renderAll() {
+            updateHeader();
+            buildDatalists();
+            refreshFilterSelects();
+            renderEntries();
+            renderVouchers();
+            document.getElementById('demo-banner').classList.toggle('hidden',
+                localStorage.getItem('alfred-demo') !== '1' || !entries.some(e => String(e.id).startsWith('demo-')));
+        }
+
+        function renderEntries() {
+            const list = filteredEntries();
+            const bad = conflictIds();
+            const hours = round2(list.reduce((n, e) => n + e.hours, 0));
+            const amount = list.reduce((n, e) => n + e.hours * e.rate, 0);
+            const alerts = list.filter(e => bad.has(e.id)).length;
+
+            document.getElementById('metrics').innerHTML =
+                metric('Total hours', hours.toFixed(2)) +
+                metric('Gross amount', money(amount)) +
+                metric('Billable entries', list.length) +
+                metric('Overlap alerts', alerts, alerts > 0);
+
+            const body = document.getElementById('entries-body');
+            if (!list.length) {
+                body.innerHTML = '<div class="card"><div class="empty">' +
+                    (entries.length ? 'No entries match these filters.' :
+                        'No time logged yet.<br>Tap the mic on the <strong>Log Time</strong> tab and say what you worked on.') +
+                    '</div></div>';
+                return;
+            }
+
+            const rows = list.map(e => editingId === e.id ? editRowHTML(e) : rowHTML(e, bad.has(e.id))).join('');
+            body.innerHTML =
+                '<div class="tbl-wrap"><table><thead><tr>' +
+                ['Date', 'Time', 'Hours', 'Case', 'Attorney', 'Category', 'Court', 'Description', 'Amount', '']
+                    .map(h => '<th>' + h + '</th>').join('') +
+                '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
+                '<div style="display:flex;justify-content:flex-end;margin-top:12px">' +
+                '<button class="btn" onclick="exportCSV()">↓ Export these ' + list.length + ' entries to CSV</button></div>';
+        }
+
+        function metric(k, v, alert) {
+            return '<div class="metric"><div class="k">' + k + '</div><div class="v' + (alert ? ' alert' : '') + '">' + v + '</div></div>';
+        }
+
+        function rowHTML(e, conflicted) {
+            return '<tr class="' + (conflicted ? 'conflict' : '') + '">' +
+                '<td class="num">' + fmtDate(e.date) + (conflicted ? ' <span class="badge b-red">⚠ conflict</span>' : '') + '</td>' +
+                '<td class="num">' + fmt12(e.start) + '<br><span style="color:var(--dim)">' + fmt12(e.end) + '</span></td>' +
+                '<td class="num"><strong>' + e.hours.toFixed(2) + '</strong></td>' +
+                '<td>' + esc(e.caseName || '—') + '</td>' +
+                '<td>' + esc(e.attorney || '—') + '</td>' +
+                '<td><span class="badge b-cat">' + esc(e.category) + '</span></td>' +
+                '<td><span class="badge ' + (e.mode === 'In-Court' ? 'b-court' : 'b-out') + '">' + esc(e.mode) + '</span></td>' +
+                '<td class="desc">' + esc(e.description) + '</td>' +
+                '<td class="num">' + money(e.hours * e.rate) + '<br><span style="color:var(--dim);font-size:11px">' + money(e.rate) + '/hr</span></td>' +
+                '<td class="acts">' +
+                '<button class="btn btn-sm" onclick="startEdit(\'' + e.id + '\')">Edit</button> ' +
+                '<button class="btn btn-sm btn-danger" onclick="deleteEntry(\'' + e.id + '\')">Delete</button></td></tr>';
+        }
+
+        function editRowHTML(e) {
+            const cat = CATEGORIES.map(c => '<option' + (c === e.category ? ' selected' : '') + '>' + esc(c) + '</option>').join('');
+            const mod = MODES.map(c => '<option' + (c === e.mode ? ' selected' : '') + '>' + esc(c) + '</option>').join('');
+            return '<tr>' +
+                '<td><input id="ed-date" type="date" class="row-inp" value="' + esc(e.date) + '"></td>' +
+                '<td><input id="ed-start" type="time" class="row-inp" value="' + esc(e.start) + '">' +
+                '<input id="ed-end" type="time" class="row-inp" style="margin-top:4px" value="' + esc(e.end) + '"></td>' +
+                '<td class="num" style="color:var(--dim)">auto</td>' +
+                '<td><input id="ed-case" class="row-inp" list="dl-cases" value="' + esc(e.caseName) + '"></td>' +
+                '<td><input id="ed-attorney" class="row-inp" list="dl-attorneys" value="' + esc(e.attorney) + '"></td>' +
+                '<td><select id="ed-category" class="row-inp">' + cat + '</select></td>' +
+                '<td><select id="ed-mode" class="row-inp">' + mod + '</select></td>' +
+                '<td class="desc"><textarea id="ed-desc" class="row-inp" style="min-height:62px">' + esc(e.description) + '</textarea></td>' +
+                '<td><input id="ed-rate" type="number" min="0" step="5" class="row-inp" value="' + e.rate + '"></td>' +
+                '<td class="acts">' +
+                '<button class="btn btn-sm btn-primary" onclick="saveEdit()">Save</button> ' +
+                '<button class="btn btn-sm" onclick="cancelEdit()">Cancel</button></td></tr>';
+        }
+
+        function startEdit(id) { editingId = id; renderEntries(); }
+        function cancelEdit() { editingId = null; renderEntries(); }
+
+        function saveEdit() {
+            const e = entries.find(x => x.id === editingId);
+            if (!e) { cancelEdit(); return; }
+            const start = document.getElementById('ed-start').value || e.start;
+            const end = document.getElementById('ed-end').value || e.end;
+            if (toMin(end) <= toMin(start)) { alert('End time must be after start time.'); return; }
+            const caseName = document.getElementById('ed-case').value.trim();
+            if (!caseName) { alert('A case / defendant name is required.'); return; }
+            e.date = document.getElementById('ed-date').value || e.date;
+            e.start = start; e.end = end; e.hours = hoursBetween(start, end);
+            e.caseName = caseName;
+            e.attorney = document.getElementById('ed-attorney').value.trim();
+            e.category = document.getElementById('ed-category').value;
+            e.mode = document.getElementById('ed-mode').value;
+            e.description = document.getElementById('ed-desc').value.trim();
+            e.rate = parseFloat(document.getElementById('ed-rate').value) || 0;
+            ensureCase(e.caseName, e.attorney);
+            editingId = null;
+            sortEntries();
+            persist();
+            renderAll();
+        }
+
+        function deleteEntry(id) {
+            const e = entries.find(x => x.id === id);
+            if (!e) return;
+            if (!confirm('Delete this ' + e.hours.toFixed(2) + '-hour entry for ' + (e.caseName || 'this case') + ' on ' + fmtDate(e.date) + '?')) return;
+            entries = entries.filter(x => x.id !== id);
+            if (editingId === id) editingId = null;
+            persist();
+            renderAll();
+        }
+
+        // ═══════════════ VOUCHERS ═══════════════
+        function renderVouchers() {
+            const names = caseNames();
+            const body = document.getElementById('vouchers-body');
+            if (!names.length) {
+                body.innerHTML = '<div class="card"><div class="empty">No cases yet.<br>Log time on the <strong>Log Time</strong> tab and each case will appear here with its own cap meter.</div></div>';
+                return;
+            }
+            body.innerHTML = names.map(voucherCardHTML).join('');
+        }
+
+        function voucherCardHTML(name) {
+            const f = caseFlags(name);
+            const pct = f.cfg.cap > 0 ? Math.min(100, (f.totals.amount / f.cfg.cap) * 100) : 0;
+            const cls = f.overCap ? 'over' : (pct >= 80 ? 'warn' : '');
+            const remaining = f.cfg.cap - f.totals.amount;
+            const badges = [];
+            if (f.overCap) badges.push('<span class="badge b-red">Over-Cap</span>');
+            if (f.overBilling) badges.push('<span class="badge b-red">Over-Billing</span>');
+            if (f.delay) badges.push('<span class="badge b-red">Delay</span>');
+            const anyAffirm = badges.length > 0;
+
+            return '<div class="card">' +
+                '<div class="vcard-head"><div>' +
+                '<h3>' + esc(name) + ' ' + badges.join(' ') + '</h3>' +
+                '<p>' + esc(f.cfg.attorney || 'No attorney on file') + ' · ' + f.totals.count + ' ' +
+                (f.totals.count === 1 ? 'entry' : 'entries') +
+                (f.oldest ? ' · oldest ' + fmtDate(f.oldest) + ' (' + f.age + ' days ago)' : '') + '</p></div>' +
+                '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+                (anyAffirm ? '<button class="btn btn-danger" onclick="openAffirm(\'' + esc(name).replace(/'/g, "&#39;") + '\')">⚑ Affirmations required</button>' : '') +
+                '<button class="btn" onclick="exportCSV(\'' + esc(name).replace(/'/g, "&#39;") + '\')">↓ Export voucher CSV</button>' +
+                '</div></div>' +
+
+                '<div class="meter"><span class="' + cls + '" style="width:' + pct.toFixed(1) + '%"></span></div>' +
+                '<div style="display:flex;justify-content:space-between;font-size:12px;margin-top:6px;color:var(--dim)">' +
+                '<span>' + money(f.totals.amount) + ' billed</span>' +
+                '<span' + (remaining < 0 ? ' style="color:var(--red);font-weight:700"' : '') + '>' +
+                (remaining < 0 ? money(-remaining) + ' over cap' : money(remaining) + ' remaining') +
+                ' of ' + money(f.cfg.cap) + '</span></div>' +
+
+                '<div class="vstats">' +
+                '<div class="vstat"><div class="k">Hours</div><div class="v">' + f.totals.hours.toFixed(2) + '</div></div>' +
+                '<div class="vstat"><div class="k">Amount</div><div class="v">' + money(f.totals.amount) + '</div></div>' +
+                '<div class="vstat"><div class="k">Rate ($/hr)</div><div class="v">' +
+                '<input class="inp" style="width:100px;padding:6px 8px" type="number" min="0" step="5" value="' + f.cfg.rate +
+                '" onchange="setCaseField(\'' + esc(name).replace(/'/g, "&#39;") + '\',\'rate\',this.value)"></div></div>' +
+                '<div class="vstat"><div class="k">Cap ($)</div><div class="v">' +
+                '<input class="inp" style="width:110px;padding:6px 8px" type="number" min="0" step="100" value="' + f.cfg.cap +
+                '" onchange="setCaseField(\'' + esc(name).replace(/'/g, "&#39;") + '\',\'cap\',this.value)"></div></div>' +
+                '</div>' +
+
+                (f.overBilling ? '<div class="banner banner-warn" style="margin:12px 0 0"><div class="ico">⚠</div><div class="body">' +
+                    '<strong>Days billed over ' + DAY_HOURS_LIMIT + ' hours</strong>' +
+                    f.heavyDays.map(d => fmtDate(d.date) + ' — ' + d.hours.toFixed(2) + ' hrs').join('; ') + '</div></div>' : '') +
+                (f.delay ? '<div class="banner banner-warn" style="margin:12px 0 0"><div class="ico">⏱</div><div class="body">' +
+                    '<strong>Outside the ' + DELAY_DAYS + '-day submission window</strong>' +
+                    'Earliest service billed ' + fmtDate(f.oldest) + ', ' + f.age + ' days ago. A Delay Affirmation is required.</div></div>' : '') +
+                '</div>';
+        }
+
+        // ═══════════════ AFFIRMATIONS ═══════════════
+        let affirmCase = null;
+        let affirmReasons = {};
+
+        function affirmText(type, name) {
+            const f = caseFlags(name);
+            const today = fmtDate(todayISO());
+            const reason = (affirmReasons[type] || '').trim() || '[state the specific circumstances here]';
+            const who = f.cfg.attorney || '[assigned counsel]';
+
+            if (type === 'overcap') {
+                return 'OVER-CAP AFFIRMATION — ' + name + '\n\n' +
+                    'The undersigned expert affirms under penalty of perjury that the services rendered in the ' +
+                    'above-captioned matter total ' + f.totals.hours.toFixed(2) + ' hours at ' + money(f.cfg.rate) + ' per hour, ' +
+                    'for a total of ' + money(f.totals.amount) + ', which exceeds the statutory compensation cap of ' + money(f.cfg.cap) + ' by ' +
+                    money(f.totals.amount - f.cfg.cap) + '.\n\n' +
+                    'Extraordinary circumstances warranting compensation in excess of the cap are as follows:\n' + reason + '\n\n' +
+                    'The services billed were necessary to the representation, were not duplicative of work performed by others, ' +
+                    'and were rendered at the request of assigned counsel, ' + who + '.\n\n' +
+                    'Dated: ' + today;
+            }
+            if (type === 'overbilling') {
+                return 'OVER-BILLING AFFIRMATION — ' + name + '\n\n' +
+                    'The undersigned expert affirms under penalty of perjury that the following dates reflect more than ' +
+                    DAY_HOURS_LIMIT.toFixed(2) + ' hours of service billed in a single calendar day:\n' +
+                    f.heavyDays.map(d => '  • ' + fmtDate(d.date) + ' — ' + d.hours.toFixed(2) + ' hours').join('\n') + '\n\n' +
+                    'Each entry reflects time actually and reasonably expended on this matter. ' +
+                    'The circumstances requiring extended hours on these dates are as follows:\n' + reason + '\n\n' +
+                    'No time billed on these dates was billed to any other matter.\n\n' +
+                    'Dated: ' + today;
+            }
+            return 'DELAY AFFIRMATION — ' + name + '\n\n' +
+                'The undersigned expert affirms under penalty of perjury that the earliest service billed on this voucher ' +
+                'was rendered on ' + fmtDate(f.oldest) + ', which is ' + f.age + ' days prior to submission and therefore outside ' +
+                'the ' + DELAY_DAYS + '-day submission window.\n\n' +
+                'The reason for the delay in submitting this voucher is as follows:\n' + reason + '\n\n' +
+                'The contemporaneous records supporting each entry are available upon request.\n\n' +
+                'Dated: ' + today;
+        }
+
+        function openAffirm(name) {
+            affirmCase = name;
+            affirmReasons = {};
+            const f = caseFlags(name);
+            const need = [];
+            if (f.overCap) need.push(['overcap', 'Over-Cap Affirmation', 'Required because billings of ' + money(f.totals.amount) + ' exceed the ' + money(f.cfg.cap) + ' cap.']);
+            if (f.overBilling) need.push(['overbilling', 'Over-Billing Affirmation', 'Required because ' + f.heavyDays.length + ' day(s) exceed ' + DAY_HOURS_LIMIT + ' billed hours.']);
+            if (f.delay) need.push(['delay', 'Delay Affirmation', 'Required because the oldest service is ' + f.age + ' days old.']);
+
+            document.getElementById('affirm-title').textContent = 'Affirmations — ' + name;
+            document.getElementById('affirm-sub').textContent =
+                'Add your justification to each affirmation, then copy the text into the voucher portal.';
+            document.getElementById('affirm-body').innerHTML = need.map(n =>
+                '<div class="affirm-block">' +
+                '<div style="font-weight:700;font-size:14px">' + n[1] + '</div>' +
+                '<div style="font-size:12.5px;color:var(--dim);margin:3px 0 10px">' + esc(n[2]) + '</div>' +
+                '<textarea class="inp" style="min-height:62px" placeholder="Your justification…" ' +
+                'oninput="setAffirmReason(\'' + n[0] + '\',this.value)"></textarea>' +
+                '<div class="affirm-text" id="affirm-out-' + n[0] + '">' + esc(affirmText(n[0], name)) + '</div>' +
+                '<div style="display:flex;justify-content:flex-end;margin-top:10px">' +
+                '<button class="btn btn-sm" onclick="copyAffirm(\'' + n[0] + '\',this)">Copy text</button></div>' +
+                '</div>').join('');
+            document.getElementById('affirm-overlay').classList.remove('hidden');
+        }
+
+        function setAffirmReason(type, val) {
+            affirmReasons[type] = val;
+            document.getElementById('affirm-out-' + type).textContent = affirmText(type, affirmCase);
+        }
+
+        function copyAffirm(type, btn) {
+            const txt = affirmText(type, affirmCase);
+            navigator.clipboard.writeText(txt).then(() => {
+                btn.textContent = 'Copied ✓';
+                setTimeout(() => { btn.textContent = 'Copy text'; }, 1800);
+            }).catch(() => { alert('Copy failed — select the text above and copy manually.'); });
+        }
+
+        function closeAffirm() {
+            document.getElementById('affirm-overlay').classList.add('hidden');
+            affirmCase = null;
+        }
+
+        // ═══════════════ EXPORT / IMPORT ═══════════════
+        function csvCell(v) {
+            const s = String(v == null ? '' : v);
+            return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+        }
+
+        function download(name, mime, text) {
+            const url = URL.createObjectURL(new Blob([text], { type: mime }));
             const a = document.createElement('a');
-            a.href = url;
-            a.download = `alfred-${stamp}.json`;
+            a.href = url; a.download = name;
             document.body.appendChild(a); a.click(); a.remove();
             setTimeout(() => URL.revokeObjectURL(url), 1000);
         }
 
-        function discardMemo() {
-            draft = { name: '', content: '', project: '', subProject: '', status: '', recurringFrequency: '' };
-            currentStep = null;
-            document.getElementById('wizard').classList.add('hidden');
-            document.getElementById('rec-idle').classList.remove('hidden');
-            document.getElementById('how-it-works').style.display = 'block';
-            document.getElementById('live-box').style.display = 'none';
-            document.getElementById('rec-error').style.display = 'none';
-            setRecState('idle');
+        // caseName omitted → export whatever the Entries tab is currently showing.
+        function exportCSV(caseName) {
+            const list = (caseName ? entries.filter(e => e.caseName === caseName) : filteredEntries())
+                .slice().sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+            if (!list.length) { alert('Nothing to export.'); return; }
+            const head = ['Date', 'Start Time', 'End Time', 'Hours', 'Case', 'Attorney', 'Category', 'In/Out Court', 'Description', 'Amount ($)'];
+            const rows = list.map(e => [
+                fmtDate(e.date), fmt12(e.start), fmt12(e.end), e.hours.toFixed(2),
+                e.caseName, e.attorney, e.category, e.mode, e.description,
+                (e.hours * e.rate).toFixed(2)
+            ]);
+            const totalH = list.reduce((n, e) => n + e.hours, 0);
+            const totalA = list.reduce((n, e) => n + e.hours * e.rate, 0);
+            rows.push(['', '', 'TOTAL', totalH.toFixed(2), '', '', '', '', '', totalA.toFixed(2)]);
+            const csv = [head, ...rows].map(r => r.map(csvCell).join(',')).join('\r\n');
+            const slug = (caseName || 'all-cases').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+            download('voucher-' + slug + '-' + todayISO() + '.csv', 'text/csv;charset=utf-8', '﻿' + csv);
         }
 
-        // ── WIZARD VOICE INPUT ──
-        function wizVoice(field) {
-            if (!SR) return;
-            if (wRec) { try { wRec.stop(); } catch (_) { } }
-            const btn = document.getElementById('voice-btn-' + field);
-            let t = 10;
-            btn.textContent = `🎤 Listening ${t}s`;
-            btn.style.color = 'var(--accent)'; btn.style.borderColor = 'var(--accent)'; btn.style.background = 'var(--aglo)';
+        function exportJSON() {
+            download('alfred-backup-' + todayISO() + '.json', 'application/json',
+                JSON.stringify({ app: 'Alfred', version: 2, entries, cases: caseBook }, null, 2));
+        }
 
-            const r = new SR();
-            r.continuous = false; r.interimResults = false; r.lang = 'en-US';
-            wRec = r;
-
-            wTimer = setInterval(() => {
-                t--;
-                btn.textContent = `🎤 Listening ${t}s`;
-                if (t <= 0) { clearInterval(wTimer); try { r.stop(); } catch (_) { } resetVoiceBtn(field); }
-            }, 1000);
-
-            r.onresult = e => {
-                clearInterval(wTimer);
-                resetVoiceBtn(field);
-                const res = e.results[0][0].transcript.trim();
-                if (field === 'name') {
-                    draft.name = res;
-                    document.getElementById('draft-name').value = res;
-                }
+        function importJSON() {
+            const inp = document.createElement('input');
+            inp.type = 'file'; inp.accept = 'application/json,.json';
+            inp.onchange = () => {
+                const file = inp.files && inp.files[0];
+                if (!file) return;
+                const fr = new FileReader();
+                fr.onload = () => {
+                    try {
+                        const data = JSON.parse(fr.result);
+                        const incoming = Array.isArray(data) ? data : (data.entries || []);
+                        if (!Array.isArray(incoming)) throw new Error('no entries');
+                        const have = new Set(entries.map(e => e.id));
+                        let added = 0;
+                        incoming.forEach(e => {
+                            if (!e || !e.id || have.has(e.id)) return;
+                            entries.push(Object.assign({
+                                hours: 0, rate: DEFAULT_RATE, mode: 'Out-of-Court',
+                                category: 'Other', createdAt: new Date().toISOString()
+                            }, e));
+                            have.add(e.id); added++;
+                        });
+                        (data.cases || []).forEach(c => { if (c && c.name) ensureCase(c.name, c.attorney); });
+                        sortEntries(); persist(); renderAll();
+                        alert('Imported ' + added + ' new ' + (added === 1 ? 'entry' : 'entries') + '.');
+                    } catch (err) {
+                        alert('That file could not be read as an Alfred backup.');
+                    }
+                };
+                fr.readAsText(file);
             };
-            const done = () => { clearInterval(wTimer); resetVoiceBtn(field); };
-            r.onerror = done; r.onend = done;
-            try { r.start(); } catch (_) { done(); }
+            inp.click();
         }
 
-        function resetVoiceBtn(field) {
-            const btn = document.getElementById('voice-btn-' + field);
-            if (!btn) return;
-            btn.textContent = '🎤 Voice input'; btn.style.color = 'var(--dim)'; btn.style.borderColor = 'var(--bdr)'; btn.style.background = 'var(--surf2)';
-        }
-
-        // ── BROWSE ──
-        function makeCard(n) {
-            const card = document.createElement('div');
-            card.style.cssText = 'background:var(--surf);border:1px solid var(--bdr);border-radius:12px;padding:13px 15px;margin-bottom:8px;cursor:pointer;transition:border-color 0.15s';
-            const badges = badgesHTML(n);
-            card.innerHTML = `
-          <div style="display:flex;justify-content:space-between;align-items:flex-start">
-            <div style="font-weight:600;font-size:15px;flex:1;padding-right:8px">${n.name}</div>
-            <div style="display:flex;gap:2px;flex-shrink:0">
-              <button onclick="event.stopPropagation();openEdit('${n.id}')" title="Edit memo" style="background:none;border:none;color:var(--dim);font-size:14px;cursor:pointer;padding:0 6px">✎</button>
-              <button onclick="event.stopPropagation();deleteNote('${n.id}')" title="Delete memo" style="background:none;border:none;color:var(--dim);font-size:14px;cursor:pointer;padding:0 2px">✕</button>
-            </div>
-          </div>
-          <div style="font-size:11px;color:var(--dim);margin-top:3px">${fmt(n.timestamp)}</div>
-          ${badges ? `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">${badges}</div>` : ''}
-          ${n.blocker === 'Yes' && n.blockerReason ? `<div style="margin-top:7px;font-size:12px;color:var(--red);line-height:1.5">🚧 ${n.blockerReason}</div>` : ''}
-          <div class="note-content hidden" style="margin-top:11px;padding-top:11px;border-top:1px solid var(--bdr);font-size:14px;color:var(--txt);line-height:1.75">${n.content || '(no transcript captured)'}</div>`;
-            card.onclick = () => {
-                const el = card.querySelector('.note-content');
-                const open = !el.classList.contains('hidden');
-                el.classList.toggle('hidden', open);
-                card.style.borderColor = open ? 'var(--bdr)' : 'var(--accent)';
-            };
-            return card;
-        }
-
-        function renderBrowse() {
-            const q = (document.getElementById('search-input').value || '').toLowerCase();
-
-            // Dimension selector
-            const ds = document.getElementById('dim-selector');
-            ds.innerHTML = '';
-            DIMS.forEach(d => {
-                const b = document.createElement('button');
-                b.className = 'pill' + (browseDim === d.key ? ' active' : '');
-                b.style.whiteSpace = 'nowrap'; b.textContent = d.label;
-                b.onclick = () => { browseDim = d.key; renderBrowse(); };
-                ds.appendChild(b);
+        // ═══════════════ DEMO DATA ═══════════════
+        function demoData() {
+            const mk = (n, d, s, e, c, a, cat, mode, desc) => ({
+                id: 'demo-' + n, date: d, start: s, end: e, hours: hoursBetween(s, e),
+                caseName: c, attorney: a, category: cat, mode, description: desc,
+                rate: DEFAULT_RATE, raw: '', createdAt: new Date().toISOString()
             });
-
-            // Combined property filters
-            renderFilters();
-
-            const filtered = notes.filter(n => {
-                const mq = !q || n.name.toLowerCase().includes(q) || (n.content || '').toLowerCase().includes(q);
-                return mq && matchesFilters(n);
-            });
-
-            const bc = document.getElementById('browse-content');
-            if (!filtered.length) {
-                bc.innerHTML = `<div style="text-align:center;color:var(--dim);padding-top:40px;font-size:14px;line-height:2">
-      ${notes.length === 0 ? '<div style="font-size:36px;margin-bottom:8px">🎙</div><div>Record your first memo</div>' : 'No memos match your search and filters'}
-    </div>`;
-                return;
-            }
-            bc.innerHTML = '';
-
-            const sectionHeader = (text) => `<div style="font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:2px;margin-bottom:12px;display:flex;align-items:center;gap:10px">${text}<div style="flex:1;height:1px;background:var(--bdr)"></div></div>`;
-
-            // Single-level grouping by the chosen dimension
-            const grouped = {};
-            filtered.forEach(n => {
-                const v = dimValue(n, browseDim);
-                if (!grouped[v]) grouped[v] = [];
-                grouped[v].push(n);
-            });
-            dimValuesPresent(browseDim).filter(v => grouped[v]).forEach(v => {
-                const div = document.createElement('div');
-                div.style.cssText = 'margin-bottom:26px';
-                div.innerHTML = sectionHeader(`${dimLabel(browseDim)}: ${v}`);
-                sortNotes(grouped[v]).forEach(n => div.appendChild(makeCard(n)));
-                bc.appendChild(div);
-            });
+            const Z = 'Douglas Zimbler', GK = 'Gloria Keum, Esq.';
+            const J = 'Joaquin Diaz', CV = 'Chief Vasquez Investigations';
+            return [
+                mk(1, daysAgoISO(2), '09:00', '12:30', Z, GK, 'Extraction Analysis', 'Out-of-Court',
+                    'Analyzed Cellebrite extraction of defendant handset; parsed call logs and message threads across the charged date range.'),
+                mk(2, daysAgoISO(2), '13:30', '15:00', Z, GK, 'File Review', 'Out-of-Court',
+                    'Reviewed supplemental police reports and search warrant returns against extraction findings.'),
+                mk(3, daysAgoISO(5), '10:00', '11:00', Z, GK, 'Phone Call / Conference', 'Out-of-Court',
+                    'Telephone conference with assigned counsel regarding preliminary extraction findings and scope of further analysis.'),
+                mk(4, daysAgoISO(9), '09:30', '13:00', Z, GK, 'Report Writing', 'Out-of-Court',
+                    'Drafted preliminary forensic findings report including methodology, tooling, and chain-of-custody summary.'),
+                mk(5, daysAgoISO(9), '14:00', '19:00', Z, GK, 'Extraction Analysis', 'Out-of-Court',
+                    'Continued artifact analysis; recovered deleted media and reconciled timestamps against cell site records.'),
+                mk(6, daysAgoISO(14), '09:00', '12:00', Z, GK, 'Discovery Download', 'Out-of-Court',
+                    'Downloaded and verified hashes on discovery production received from the District Attorney.'),
+                mk(7, daysAgoISO(120), '14:00', '16:00', Z, GK, 'File Review', 'Out-of-Court',
+                    'Initial review of case file and assignment materials upon appointment.'),
+                mk(8, daysAgoISO(1), '16:30', '17:30', J, CV, 'Phone Call / Conference', 'Out-of-Court',
+                    'Conference regarding scope of digital evidence review and anticipated timeline.'),
+                mk(9, daysAgoISO(3), '15:30', '16:15', J, CV, 'Discovery Download', 'Out-of-Court',
+                    'Retrieved and catalogued body-worn camera footage from the discovery portal.'),
+                mk(10, daysAgoISO(6), '11:00', '13:00', J, CV, 'Court Testimony', 'In-Court',
+                    'Testified at suppression hearing regarding extraction methodology and evidence handling.')
+            ];
         }
 
-        function deleteNote(id) {
-            notes = notes.filter(n => n.id !== id); persist(); updateCount(); renderBrowse();
-        }
-
-        let editingId = null;
-
-        function openEdit(id) {
-            const note = notes.find(n => n.id === id);
-            if (!note) return;
-            editingId = id;
-            document.getElementById('edit-name').value = note.name || '';
-            document.getElementById('edit-content').value = note.content || '';
-            document.getElementById('edit-priority').value = note.priority || '';
-            document.getElementById('edit-difficulty').value = note.difficulty || '';
-            document.getElementById('edit-blocker').value = note.blocker || '';
-            document.getElementById('edit-blocker-reason').value = note.blockerReason || '';
-            document.getElementById('edit-status').value = note.status || '';
-            document.getElementById('edit-recur').value = note.recurringFrequency || '';
-            document.getElementById('edit-project').value = note.project || '';
-            document.getElementById('edit-sub-project').value = note.subProject || '';
-            onBlockerChange();
-            document.getElementById('edit-modal').style.display = 'flex';
-        }
-
-        function closeEdit() {
-            editingId = null;
-            document.getElementById('edit-modal').style.display = 'none';
-        }
-
-        function onBlockerChange() {
-            const isBlocked = document.getElementById('edit-blocker').value === 'Yes';
-            document.getElementById('edit-blocker-reason-wrap').style.display = isBlocked ? 'block' : 'none';
-        }
-
-        function saveEdit() {
-            if (!editingId) return;
-            const idx = notes.findIndex(n => n.id === editingId);
-            if (idx === -1) { closeEdit(); return; }
-
-            const name = document.getElementById('edit-name').value.trim();
-            const content = document.getElementById('edit-content').value;
-
-            notes[idx] = {
-                ...notes[idx],
-                name: name || 'Untitled',
-                content: content,
-                priority: document.getElementById('edit-priority').value,
-                difficulty: document.getElementById('edit-difficulty').value,
-                blocker: document.getElementById('edit-blocker').value,
-                blockerReason: document.getElementById('edit-blocker').value === 'Yes'
-                    ? document.getElementById('edit-blocker-reason').value.trim() : '',
-                status: document.getElementById('edit-status').value,
-                recurringFrequency: document.getElementById('edit-recur').value,
-                project: document.getElementById('edit-project').value,
-                subProject: document.getElementById('edit-sub-project').value,
-            };
-
+        function maybeSeed() {
+            if (entries.length || localStorage.getItem('alfred-seeded') === '1') return;
+            entries = demoData();
+            caseBook = [
+                { name: 'Douglas Zimbler', attorney: 'Gloria Keum, Esq.', rate: DEFAULT_RATE, cap: DEFAULT_CAP },
+                { name: 'Joaquin Diaz', attorney: 'Chief Vasquez Investigations', rate: DEFAULT_RATE, cap: DEFAULT_CAP }
+            ];
+            localStorage.setItem('alfred-seeded', '1');
+            localStorage.setItem('alfred-demo', '1');
+            sortEntries();
             persist();
-            updateCount();
-            renderBrowse();
-            closeEdit();
+            renderAll();
         }
 
-        function updateCount() {
-            document.getElementById('memo-count').textContent = `${notes.length} memo${notes.length !== 1 ? 's' : ''} saved`;
+        function clearDemo() {
+            if (!confirm('Remove the sample Zimbler and Diaz entries? Anything you logged yourself is kept.')) return;
+            const keptCases = new Set();
+            entries = entries.filter(e => {
+                if (String(e.id).startsWith('demo-')) return false;
+                keptCases.add(e.caseName); return true;
+            });
+            caseBook = caseBook.filter(c => keptCases.has(c.name));
+            localStorage.setItem('alfred-demo', '0');
+            persist();
+            renderAll();
         }
+
+        // ═══════════════ INIT ═══════════════
+        async function initApp() {
+            renderChips();
+            sortEntries();
+            renderAll();
+            if (!SR) {
+                document.getElementById('rec-label').textContent = 'Voice input needs Chrome or Edge — type below instead';
+            }
+            if (cloudEnabled) await loadFromCloud();
+            maybeSeed();
+        }
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') { closeAffirm(); if (editingId) cancelEdit(); }
+        });
 
         initApp();
     </script>
