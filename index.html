@@ -1098,6 +1098,15 @@
         ];
         const NAME_MATCH_THRESHOLD = 0.72;   // suggest an existing name at or above this
 
+        // The attorneys actually worked with. Seeding these means dictation can match a
+        // name on the very first entry, before any history exists, and they are selectable
+        // rather than dictated. Names typed into entries join the list automatically.
+        const ATTORNEYS = [
+            'Adam Silverstein', 'Danielle Von Lehman', 'David Breschel', 'Eric Renfroe',
+            'Glenn Abolafia', 'Gloria Keum', 'Howard Weiner', 'Jin Lee', 'Liam Malanaphy',
+            'Nicole Guliano', 'Toni Messina'
+        ];
+
         const EXAMPLES = [
             'Review phone extraction for Douglas Zimbler with Gloria Keum for 1.5 hrs',
             'Call with attorney regarding Joaquin Diaz discovery download 45 mins',
@@ -1165,6 +1174,15 @@
             entries.forEach(e => { if (e.attorney) s.add(e.attorney); });
             return [...s].filter(Boolean).sort();
         }
+        // Roster first, then any attorney recorded in the data that is not already on it.
+        // Deduped by normalised name so "Gloria Keum" and "Gloria Keum, Esq." are one entry.
+        function attorneyOptions() {
+            const byNorm = new Map();
+            ATTORNEYS.forEach(a => byNorm.set(normName(a), a));
+            attorneyNames().forEach(a => { if (!byNorm.has(normName(a))) byNorm.set(normName(a), a); });
+            return [...byNorm.values()].sort((a, b) => a.localeCompare(b));
+        }
+
         function caseCfg(name) {
             const c = caseBook.find(x => x.name === name);
             return {
@@ -1610,7 +1628,7 @@
         }
 
         function parseAttorney(text) {
-            const known = knownMatch(attorneyNames(), text);
+            const known = knownMatch(attorneyOptions(), text);
             if (known) return known;
 
             let m = text.match(/\b([A-Z][A-Za-z'\u2019-]+(?:\s+[A-Z][A-Za-z'\u2019-]+)?)\s*,?\s*Esq\.?/);
@@ -1974,8 +1992,8 @@
                 '<div class="field"><label for="r-case">Case / defendant</label>' +
                 '<input id="r-case" class="inp" list="dl-cases" value="' + esc(d.caseName) + '" placeholder="e.g. Douglas Zimbler" oninput="onReviewChange()">' +
                 '<div id="r-case-suggest"></div></div>' +
-                '<div class="field"><label for="r-attorney">Attorney / retaining counsel</label>' +
-                '<input id="r-attorney" class="inp" list="dl-attorneys" value="' + esc(d.attorney) + '" placeholder="e.g. Gloria Keum, Esq." oninput="onReviewChange()">' +
+                '<div class="field"><label for="r-attorney-sel">Attorney / retaining counsel</label>' +
+                attorneySelectHTML(d.attorney) +
                 '<div id="r-attorney-suggest"></div></div>' +
                 '<div class="field"><label for="r-date">Date</label>' +
                 '<input id="r-date" type="date" class="inp" value="' + esc(d.date) + '" oninput="onReviewChange()"></div>' +
@@ -1991,6 +2009,49 @@
                 '<div class="field"><label>Amount</label><div class="readout" id="r-amount">' + money(d.hours * d.rate) + '</div></div>' +
                 '<div class="field wide"><label for="r-desc">Narrative description (appears on the voucher)</label>' +
                 '<textarea id="r-desc" class="inp" oninput="onReviewChange()">' + esc(d.description) + '</textarea></div>';
+        }
+
+        // A select over the roster, plus a text field that appears only when the name is
+        // not on it. The input stays the single source of truth for readReview().
+        function attorneySelectHTML(current) {
+            const opts = attorneyOptions();
+            const cur = normName(current);
+            const known = opts.find(o => normName(o) === cur) || '';
+            const other = !!current && !known;
+            return '<select id="r-attorney-sel" class="inp" onchange="onAttorneySelect()">' +
+                '<option value=""' + (!current ? ' selected' : '') + '>\u2014 Select attorney \u2014</option>' +
+                opts.map(o => '<option value="' + esc(o) + '"' + (known === o ? ' selected' : '') +
+                    '>' + esc(o) + '</option>').join('') +
+                '<option value="__other"' + (other ? ' selected' : '') + '>Other / type a name\u2026</option>' +
+                '</select>' +
+                '<input id="r-attorney" class="inp' + (other ? '' : ' hidden') + '" style="margin-top:8px" ' +
+                'list="dl-attorneys" value="' + esc(known || current || '') + '" ' +
+                'placeholder="Attorney name" oninput="onReviewChange()">';
+        }
+
+        function onAttorneySelect() {
+            const sel = document.getElementById('r-attorney-sel');
+            const inp = document.getElementById('r-attorney');
+            if (sel.value === '__other') {
+                inp.classList.remove('hidden');
+                inp.value = '';
+                inp.focus();
+            } else {
+                inp.classList.add('hidden');
+                inp.value = sel.value;
+            }
+            onReviewChange();
+        }
+
+        // Keeps the dropdown and the text field in step when something else sets the name.
+        function setAttorneyValue(v) {
+            const sel = document.getElementById('r-attorney-sel');
+            const inp = document.getElementById('r-attorney');
+            if (!sel || !inp) return;
+            const match = attorneyOptions().find(o => normName(o) === normName(v)) || '';
+            inp.value = match || v;
+            sel.value = match ? match : (v ? '__other' : '');
+            inp.classList.toggle('hidden', !!match || !v);
         }
 
         function readReview() {
@@ -2027,7 +2088,7 @@
             const dismissed = isCase ? draft.dismissedCase : draft.dismissedAttorney;
             const hit = dismissed === normName(typed)
                 ? null
-                : bestFuzzyMatch(isCase ? caseNames() : attorneyNames(), typed);
+                : bestFuzzyMatch(isCase ? caseNames() : attorneyOptions(), typed);
             if (!hit) { box.innerHTML = ''; return; }
             box.innerHTML = '<div class="suggest">' +
                 '<strong>Did you mean ' + esc(hit.name) + '?</strong><br>' +
@@ -2042,14 +2103,15 @@
 
         function acceptSuggestion(field) {
             const isCase = field === 'case';
-            const hit = bestFuzzyMatch(isCase ? caseNames() : attorneyNames(),
+            const hit = bestFuzzyMatch(isCase ? caseNames() : attorneyOptions(),
                 isCase ? draft.caseName : draft.attorney);
             if (!hit) return;
-            document.getElementById('r-' + field).value = hit.name;
+            if (isCase) document.getElementById('r-case').value = hit.name;
+            else setAttorneyValue(hit.name);
             if (isCase) {
                 // Adopt the established case's attorney and rate along with its name.
                 const cfg = caseCfg(hit.name);
-                if (cfg.attorney && !draft.attorney) document.getElementById('r-attorney').value = cfg.attorney;
+                if (cfg.attorney && !draft.attorney) setAttorneyValue(cfg.attorney);
                 document.getElementById('r-rate').value = cfg.rate;
             }
             onReviewChange();
@@ -2226,7 +2288,7 @@
             }
             dl.innerHTML =
                 '<datalist id="dl-cases">' + caseNames().map(n => '<option value="' + esc(n) + '">').join('') + '</datalist>' +
-                '<datalist id="dl-attorneys">' + attorneyNames().map(n => '<option value="' + esc(n) + '">').join('') + '</datalist>';
+                '<datalist id="dl-attorneys">' + attorneyOptions().map(n => '<option value="' + esc(n) + '">').join('') + '</datalist>';
         }
 
         function refreshFilterSelects() {

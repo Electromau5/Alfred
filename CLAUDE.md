@@ -80,6 +80,7 @@ In JS, entries use camelCase (`caseName`, `startTime` → `start`, `end`, `raw`)
 | `DELAY_DAYS` | `90` — work older than this triggers a Delay Affirmation |
 | `DAY_HOURS_LIMIT` | `8` — hours on one calendar day that trigger Over-Billing |
 | `REC_MAX` | `60` — seconds of dictation per entry |
+| `ATTORNEYS` | The 11-name attorney roster, alphabetical. Seeded so dictation can match a name on the first entry, before any history exists |
 | `CATEGORIES` | Discovery Download, File Review, Extraction Analysis, Phone Call / Conference, Report Writing, Court Testimony, Travel, Other |
 | `MODES` | `['Out-of-Court','In-Court']` |
 | `CAT_RULES` | Ordered keyword→category scoring table used by the parser |
@@ -139,6 +140,23 @@ Two entries conflict when they share a date and their `[start, end)` minute rang
 
 The modal generates standard affirmation text per trigger, live-updating as you type the
 justification, with a copy-to-clipboard button.
+
+### Attorney roster (`ATTORNEYS`, `attorneyOptions`, `attorneySelectHTML`)
+`ATTORNEYS` is the fixed roster. `attorneyOptions()` returns it unioned with any attorney
+found in the data, deduped by `normName` so "Gloria Keum" and "Gloria Keum, Esq." are one
+option. The review form renders a `<select>` over those options plus an
+**Other / type a name…** entry that reveals a text input; `#r-attorney` remains the single
+source of truth that `readReview()` reads, and `setAttorneyValue()` keeps select and input in
+step when something else (an accepted suggestion, an adopted case default) sets the name.
+
+Two consequences worth keeping:
+- **Seeding the roster improves dictation**, because `parseAttorney` and the fuzzy suggestion
+  both match against `attorneyOptions()`. "attorney Malanaphy" resolves on a first-ever entry.
+- **The filter dropdown deliberately uses `attorneyNames()`, not the roster** — filtering by
+  an attorney with no entries would only ever return nothing.
+
+Adding a name permanently means editing `ATTORNEYS`; anything typed into an entry joins the
+options automatically for as long as that entry exists.
 
 ### Accent-tolerant name matching (`nameSimilarity`, `bestFuzzyMatch`, `mergeNames`)
 Dictation renders the same surname differently between entries, which silently splits one
