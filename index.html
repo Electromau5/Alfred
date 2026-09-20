@@ -802,6 +802,10 @@
             <!-- Capture -->
             <div id="capture" class="card">
                 <div class="capture-wrap">
+                    <div id="speech-note" class="banner banner-info hidden"
+                        style="width:100%;margin-bottom:18px"></div>
+
+                    <div id="rec-block" style="display:flex;flex-direction:column;align-items:center;width:100%">
                     <div class="ring-wrap">
                         <svg id="ring-svg" width="148" height="148">
                             <circle cx="74" cy="74" r="54" fill="none" stroke="#e2e8f0" stroke-width="7" />
@@ -816,6 +820,7 @@
                     <div id="rec-sub" class="hidden"
                         style="font-size:12px;color:var(--dim2);margin-top:4px">Say the case, the attorney, what you
                         did, and how long.</div>
+                    </div>
 
                     <div id="rec-error" class="banner banner-red hidden"
                         style="margin-top:16px;width:100%;margin-bottom:0"></div>
@@ -825,7 +830,7 @@
                         <div id="live-text"></div>
                     </div>
 
-                    <div class="divider">or type it</div>
+                    <div class="divider" id="type-divider">or type it</div>
 
                     <textarea id="text-input" class="inp"
                         placeholder="e.g. Spent 45 minutes reviewing phone extractions for the Douglas Zimbler case with attorney Gloria"></textarea>
@@ -999,7 +1004,9 @@
         let activeTab = 'log';
 
         // ── Recording state (ported from the memo recorder) ──
-        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        // `let`, not `const`: the no-speech degradation paths are only testable if this
+        // can be stubbed out.
+        let SR = window.SpeechRecognition || window.webkitSpeechRecognition;
         const CIRC = 2 * Math.PI * 54;
         let recState = 'idle';
         let timeLeft = REC_MAX;
@@ -1437,6 +1444,72 @@
             };
         }
 
+        // ═══════════ SPEECH CAPABILITY ═══════════
+        // Three separate reasons dictation can be unavailable, and each needs different
+        // advice. Telling someone already in Chrome on an iPhone that this "requires
+        // Chrome" is worse than saying nothing.
+        function isIOS() {
+            const ua = navigator.userAgent || '';
+            // iPadOS 13+ reports as MacIntel; touch points are the only reliable tell.
+            return /iPad|iPhone|iPod/.test(ua) ||
+                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        }
+        function isIOSSafari() {
+            const ua = navigator.userAgent || '';
+            return isIOS() && /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|Chrome/.test(ua);
+        }
+
+        function speechSupport() {
+            // Checked first: on an insecure origin Chrome still exposes the constructor
+            // but refuses to start, which reads to the user as a dead button.
+            if (!window.isSecureContext) {
+                return {
+                    ok: false, reason: 'insecure',
+                    title: 'Voice input needs a secure (HTTPS) connection',
+                    message: 'This page is served over plain HTTP, so the browser blocks the microphone. ' +
+                        'Open the HTTPS version of Alfred to dictate, or type your entry below \u2014 that works anywhere.'
+                };
+            }
+            if (!SR) {
+                if (isIOS() && !isIOSSafari()) {
+                    return {
+                        ok: false, reason: 'ios-thirdparty',
+                        title: 'On iPhone and iPad, only Safari can dictate',
+                        message: 'Apple requires every iOS browser to use the same engine, and it does not offer speech ' +
+                            'recognition to third-party browsers like Chrome. Open this page in Safari to use voice input, ' +
+                            'or type your entry below.'
+                    };
+                }
+                return {
+                    ok: false, reason: 'unsupported',
+                    title: 'This browser cannot do voice input',
+                    message: 'Chrome, Edge, and Safari support dictation. Typing the entry below works in any browser.'
+                };
+            }
+            return { ok: true };
+        }
+
+        // When dictation is impossible, lead with the typed path rather than leaving a
+        // prominent mic button that does nothing when tapped.
+        function applySpeechSupport() {
+            const sup = speechSupport();
+            const note = document.getElementById('speech-note');
+            const block = document.getElementById('rec-block');
+            const divider = document.getElementById('type-divider');
+            if (sup.ok) {
+                note.classList.add('hidden');
+                block.classList.remove('hidden');
+                divider.textContent = 'or type it';
+                return;
+            }
+            block.classList.add('hidden');
+            note.classList.remove('hidden');
+            note.className = 'banner banner-info';
+            note.innerHTML = '<div class="ico">\u2139</div><div class="body"><strong>' + esc(sup.title) + '</strong>' +
+                esc(sup.message) + '</div>';
+            divider.textContent = 'log an entry';
+        }
+
         // ═══════════════ VOICE RECORDING ═══════════════
         function toggleRec() {
             if (recState === 'rec') doStop();
@@ -1444,7 +1517,8 @@
         }
 
         function startRec() {
-            if (!SR) { showError('Speech recognition requires Chrome or Edge. You can still type the entry below.'); return; }
+            const sup = speechSupport();
+            if (!sup.ok) { showError(sup.title + ' — ' + sup.message); return; }
             setRecState('starting');
             finalText = '';
             document.getElementById('live-box').classList.add('hidden');
@@ -2302,9 +2376,7 @@
             renderChips();
             sortEntries();
             renderAll();
-            if (!SR) {
-                document.getElementById('rec-label').textContent = 'Voice input needs Chrome or Edge — type below instead';
-            }
+            applySpeechSupport();
             if (cloudEnabled) await loadFromCloud();
             maybeSeed();
         }

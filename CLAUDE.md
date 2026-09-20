@@ -22,7 +22,9 @@ mcp/server.js  — optional MCP server exposing time entries as tools (reads the
 - **Frontend:** Vanilla JS, Web Speech API (dictation), CSS custom properties
 - **Storage:** `localStorage` (primary cache) + Supabase (cloud sync, upsert on save)
 - **Cloud:** Supabase JS SDK loaded via CDN (`@supabase/supabase-js@2`)
-- **Deploy:** not linked yet — run `vercel link` to create a deployment (no `.vercel/` config in this repo)
+- **Deploy:** Vercel, production alias **https://alfred-iota-three.vercel.app** (`vercel --prod`).
+  `.vercelignore` keeps `mcp/`, `schema.sql` and `CLAUDE.md` out of the bundle — `mcp/package.json`
+  would otherwise trip Vercel's framework detection on an app that needs no build.
 
 ## Supabase setup
 Credentials are hardcoded at the top of the `<script>` block:
@@ -172,8 +174,17 @@ Zimbler always demonstrates all three affirmation triggers.
 - **`renderAll()` is the render loop** — call it after any state change that affects display;
   `renderEntries()` / `renderVouchers()` repaint a single tab.
 - **Cloud sync is fire-and-forget** — errors are logged to console but never surfaced.
-- **Speech API is Chrome/Edge only** — other browsers fall back to the text box, and the
-  recorder label says so.
+- **Speech availability is three-valued, not a boolean** — see `speechSupport()`. Dictation needs
+  *both* a secure context and a real engine:
+  - **Not HTTPS** → Chrome exposes the constructor but refuses to start, so the button looks dead.
+    `window.isSecureContext` is checked first for exactly this reason.
+  - **iOS, any non-Safari browser** → Apple requires WKWebView, which does not expose
+    `webkitSpeechRecognition`. Chrome on iPhone will *never* dictate, however it is served.
+    iOS Safari works.
+  - **Otherwise unsupported** → generic message.
+  When unavailable, `applySpeechSupport()` hides the mic entirely and promotes the typed path,
+  rather than leaving a prominent button that does nothing. Never reintroduce a bare `if (!SR)`
+  with a "requires Chrome" message — that is wrong on every one of these paths.
 - **Anything that clears data must clear both tiers** — localStorage *and* Supabase — or it
   silently comes back from the cloud on the next load. See `doErase()`.
 - **`hours` is always derived** from start/end — never set it independently, or CSV totals and

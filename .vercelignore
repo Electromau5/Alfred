@@ -1,0 +1,5 @@
+# The MCP server is a local stdio tool, not part of the web deployment.
+# Its package.json would otherwise confuse Vercel's framework detection.
+mcp/
+schema.sql
+CLAUDE.md
