@@ -1037,7 +1037,7 @@
                         </svg>
                         <button id="rec-btn" onclick="toggleRec()">&#127908;</button>
                     </div>
-                    <div id="timer-display" class="hidden">60s</div>
+                    <div id="timer-display" class="hidden">2:00</div>
                     <div id="rec-label">Tap to dictate a time entry</div>
                     <div id="rec-sub" class="hidden"
                         style="font-size:12px;color:var(--dim2);margin-top:4px">Say the case, the attorney, what you
@@ -1222,7 +1222,7 @@
         const DEFAULT_CAP = 3000;     // statutory voucher cap, $
         const DELAY_DAYS = 90;        // work older than this triggers a Delay Affirmation
         const DAY_HOURS_LIMIT = 8;    // hours billed on one calendar day that triggers Over-Billing
-        const REC_MAX = 60;           // seconds of dictation per entry
+        const REC_MAX = 120;          // seconds of dictation, for both capture and edit
 
         const CATEGORIES = ['Discovery Download', 'File Review', 'Extraction Analysis',
             'Phone Call / Conference', 'Report Writing', 'Court Testimony', 'Travel', 'Other'];
@@ -1315,6 +1315,12 @@
         function toTitle(s) { return s.replace(/\w\S*/g, t => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()); }
         function money(n) { return '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
         function round2(n) { return Math.round(n * 100) / 100; }
+
+        // At two minutes a bare second count ("117s") stops being readable.
+        function fmtCountdown(sec) {
+            const s = Math.max(0, Math.round(sec));
+            return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+        }
 
         function toMin(t) { const p = String(t || '0:00').split(':'); return (+p[0]) * 60 + (+(p[1] || 0)); }
         function toHHMM(m) { m = Math.max(0, Math.min(1439, Math.round(m))); return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
@@ -1628,7 +1634,10 @@
                 .replace(/\bseven\b/g, '7').replace(/\beight\b/g, '8').replace(/\bnine\b/g, '9')
                 .replace(/\bten\b/g, '10').replace(/\bfifteen\b/g, '15').replace(/\btwenty\b/g, '20')
                 .replace(/\bthirty\b/g, '30').replace(/\bforty[\s-]?five\b/g, '45').replace(/\bforty\b/g, '40')
-                .replace(/\bninety\b/g, '90');
+                .replace(/\bninety\b/g, '90')
+                // Must run AFTER the word numbers above: "two and a half" only becomes
+                // matchable once "two" is already the digit 2.
+                .replace(/\b(\d+)\s+and\s+a\s+half\b/g, '$1.5');
         }
 
         function parseDuration(low) {
@@ -2094,7 +2103,9 @@
                 const mins = parseDuration(low);
                 if (mins) return round2(mins / 60);
                 if (strict) return null;          // a bare number is only meaningful after "hours"
-                const n = val.match(/(\d+(?:\.\d+)?)/);
+                // "three" carries no unit, so parseDuration misses it; normalise words to
+                // digits before looking for a bare number.
+                const n = normalizeDurationWords(low).match(/(\d+(?:\.\d+)?)/);
                 return n ? round2(parseFloat(n[1])) : null;
             }
             if (key === 'rate') {
@@ -2143,6 +2154,21 @@
             return null;
         }
 
+        // Words that join two spoken commands. They never end a field's value, so when a
+        // further field follows they are trimmed off the tail of this one.
+        const TAIL_CONNECTIVE = new Set(['and', 'then', 'also', 'plus', 'so', 'but', 'now',
+            'mark', 'make', 'set', 'change', 'put', 'it', 'its', 'that', 'this', 'as', 'the',
+            'a', 'an', 'to', 'be', 'was', 'is', 'please', 'for', 'of', 'with']);
+
+        function stripTrailingConnective(str) {
+            const words = String(str || '').trim().split(/\s+/).filter(Boolean);
+            while (words.length > 1 &&
+                TAIL_CONNECTIVE.has(words[words.length - 1].toLowerCase().replace(/[^a-z']/g, ''))) {
+                words.pop();
+            }
+            return words.join(' ');
+        }
+
         // Returns { changes, heard } — changes maps field -> new value.
         function parseEditCommand(text) {
             const orig = ' ' + String(text || '').trim().replace(/\s+/g, ' ') + ' ';
@@ -2167,9 +2193,20 @@
                 const next = ordered[i + 1];
                 // A trigger that is itself the value (e.g. "in-court") keeps its own text.
                 const slice = h.key === 'mode' ? h.word : orig.slice(h.end, next ? next.start : orig.length);
-                const cleaned = String(slice).replace(/^\s*(?:to|is|as|was|should\s+be|=|:)\s+/i, '')
-                    .replace(/\s+and\s*$/i, '').trim();
-                const v = editFieldValue(h.key, cleaned, h.word);
+                let cleaned = String(slice).replace(/^\s*(?:to|is|as|was|should\s+be|=|:)\s+/i, '').trim();
+                // When another field follows, the words joining the two clauses belong to
+                // the NEXT one. Without this, "the attorney to Toni Messina and mark it as
+                // in court" reads the attorney as "Toni Messina And Mark It As".
+                if (next) cleaned = stripTrailingConnective(cleaned);
+                let v = editFieldValue(h.key, cleaned, h.word);
+                if (v === null || v === undefined || v === '') {
+                    // Some phrasings put the value first — "make it two and a half hours",
+                    // "9am start". Fall back to the text preceding the trigger.
+                    const prev = ordered[i - 1];
+                    const before = orig.slice(prev ? prev.end : 0, h.start)
+                        .replace(/^\s*(?:to|is|as|was|=|:)\s+/i, '').trim();
+                    if (before) v = editFieldValue(h.key, before, h.word);
+                }
                 if (v !== null && v !== undefined && v !== '') changes[h.key] = v;
             });
 
@@ -2251,7 +2288,7 @@
             recDeadline = Date.now() + REC_MAX * 1000;
             rTimer = setInterval(() => {
                 const left = Math.max(0, Math.ceil((recDeadline - Date.now()) / 1000));
-                document.getElementById('timer-display').textContent = left + 's';
+                document.getElementById('timer-display').textContent = fmtCountdown(left);
                 document.getElementById('ring-progress').style.strokeDashoffset = CIRC - (left / REC_MAX) * CIRC;
                 if (left <= 0) doStop();
             }, 250);
@@ -2298,7 +2335,7 @@
             } else if (state === 'rec') {
                 btn.classList.add('rec'); btn.textContent = '⏹';
                 ring.classList.remove('hidden'); ring.style.strokeDashoffset = CIRC;
-                timer.classList.remove('hidden'); timer.textContent = REC_MAX + 's';
+                timer.classList.remove('hidden'); timer.textContent = fmtCountdown(REC_MAX);
                 sub.classList.remove('hidden');
                 label.textContent = 'Recording — tap to stop';
                 label.style.color = 'var(--red)';
@@ -2863,9 +2900,13 @@
         // A second, short-lived recogniser, separate from the 60-second capture used to
         // create entries. Commands are a sentence, not a dictation.
         let edRec = null, edTimer = null, edPending = null;
+        // Split exactly like the capture recorder: text from sessions that have already
+        // ended, plus the session currently running. Android ends a session at every pause.
+        let edActive = false, edDeadline = 0, edCommitted = '', edSession = '';
 
         function toggleEditVoice() {
-            if (edRec) { stopEditVoice(); return; }
+            if (edActive) { finishEditVoice(); return; }
+
             const sup = speechSupport();
             if (!sup.ok) {
                 document.getElementById('ed-voice-out').innerHTML =
@@ -2874,48 +2915,84 @@
                     esc(sup.message) + ' You can still edit the fields above by hand.</div></div>';
                 return;
             }
+
+            edActive = true;
+            edCommitted = ''; edSession = '';
+            edDeadline = Date.now() + REC_MAX * 1000;
+            document.getElementById('ed-voice-out').innerHTML = '';
+
+            clearInterval(edTimer);
+            edTimer = setInterval(() => {
+                const left = Math.max(0, Math.ceil((edDeadline - Date.now()) / 1000));
+                const b = document.getElementById('ed-mic');
+                if (b) b.textContent = '⏹ Stop & apply · ' + fmtCountdown(left);
+                if (left <= 0) finishEditVoice();
+            }, 250);
+
             const btn = document.getElementById('ed-mic');
-            const out = document.getElementById('ed-voice-out');
-            let left = 15;
             btn.classList.add('listening');
-            btn.textContent = '⏹ Listening ' + left + 's';
-            out.innerHTML = '';
+            btn.textContent = '⏹ Stop & apply · ' + fmtCountdown(REC_MAX);
 
             const r = new SR();
-            r.continuous = false; r.interimResults = true; r.lang = speechLang;
+            // Continuous, so thinking mid-sentence does not end the command. Without this
+            // the window length is irrelevant — the first pause would stop it.
+            r.continuous = true; r.interimResults = true; r.lang = speechLang;
             edRec = r;
-            let heard = '';
-
-            edTimer = setInterval(() => {
-                left--;
-                if (btn) btn.textContent = '⏹ Listening ' + left + 's';
-                if (left <= 0) stopEditVoice();
-            }, 1000);
 
             r.onresult = e => {
-                const parts = [], interim = [];
+                const finals = [], interim = [];
                 for (let j = 0; j < e.results.length; j++) {
-                    (e.results[j].isFinal ? parts : interim).push(e.results[j][0].transcript);
+                    (e.results[j].isFinal ? finals : interim).push(e.results[j][0].transcript);
                 }
-                const finals = collapseParts(parts);
-                if (finals) heard = finals;
-                const show = joinText(heard, collapseParts(interim));
-                if (show) out.innerHTML = '<div class="heard">“' + esc(show) + '”</div>';
+                edSession = collapseParts(finals);
+                const show = joinText(joinText(edCommitted, edSession), collapseParts(interim));
+                const out = document.getElementById('ed-voice-out');
+                if (out && show) out.innerHTML = '<div class="heard">“' + esc(show) + '”</div>';
             };
-            r.onerror = () => { stopEditVoice(); };
+
             r.onend = () => {
-                clearInterval(edTimer); edRec = null;
-                resetEditMic();
-                if (heard.trim()) applyHeardEdit(heard.trim());
-                else document.getElementById('ed-voice-out').innerHTML =
-                    '<div class="heard">Nothing was heard. Tap and speak the change, e.g. “change the hours to three”.</div>';
+                edCommitted = joinText(edCommitted, edSession);
+                edSession = '';
+                if (!edActive) return;                       // stopped deliberately
+                if (Date.now() >= edDeadline) { finishEditVoice(); return; }
+                try { r.start(); } catch (_) { /* already restarting */ }
             };
-            try { r.start(); } catch (_) { stopEditVoice(); }
+
+            r.onerror = ev => {
+                if (ev.error === 'no-speech') return;        // a pause, not a failure
+                abortEditVoice();
+                const out = document.getElementById('ed-voice-out');
+                if (out) out.innerHTML = '<div class="heard">Recognition error: ' + esc(ev.error) +
+                    '. The fields above can still be edited by hand.</div>';
+            };
+
+            try { r.start(); } catch (_) { abortEditVoice(); }
         }
 
-        function stopEditVoice() {
+        // Ends the session and acts on what was said.
+        function finishEditVoice() {
+            if (!edActive) return;
+            edActive = false;
             clearInterval(edTimer);
-            if (edRec) { try { edRec.stop(); } catch (_) { } }
+            // Drop onend before stopping, or it restarts the session mid-teardown.
+            if (edRec) { try { edRec.onend = null; edRec.stop(); } catch (_) { } edRec = null; }
+            const said = joinText(edCommitted, edSession).trim();
+            edCommitted = ''; edSession = '';
+            resetEditMic();
+            if (said) applyHeardEdit(said);
+            else {
+                const out = document.getElementById('ed-voice-out');
+                if (out) out.innerHTML = '<div class="heard">Nothing was heard. Tap and speak the change, ' +
+                    'e.g. “change the hours to three”.</div>';
+            }
+        }
+
+        // Ends the session and throws away what was said — used when leaving the row.
+        function abortEditVoice() {
+            edActive = false;
+            clearInterval(edTimer);
+            if (edRec) { try { edRec.onend = null; edRec.stop(); } catch (_) { } edRec = null; }
+            edCommitted = ''; edSession = '';
             resetEditMic();
         }
 
@@ -3015,11 +3092,11 @@
             document.getElementById('ed-voice-out').innerHTML = '';
         }
 
-        function startEdit(id) { editingId = id; stopEditVoice(); edPending = null; renderEntries(); }
-        function cancelEdit() { stopEditVoice(); edPending = null; editingId = null; renderEntries(); }
+        function startEdit(id) { editingId = id; abortEditVoice(); edPending = null; renderEntries(); }
+        function cancelEdit() { abortEditVoice(); edPending = null; editingId = null; renderEntries(); }
 
         function saveEdit() {
-            stopEditVoice(); edPending = null;
+            abortEditVoice(); edPending = null;
             const e = entries.find(x => x.id === editingId);
             if (!e) { cancelEdit(); return; }
             const start = document.getElementById('ed-start').value || e.start;

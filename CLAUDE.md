@@ -80,7 +80,7 @@ In JS, entries use camelCase (`caseName`, `startTime` → `start`, `end`, `raw`)
 | `DEFAULT_CAP` | `3000` — statutory voucher cap, $ |
 | `DELAY_DAYS` | `90` — work older than this triggers a Delay Affirmation |
 | `DAY_HOURS_LIMIT` | `8` — hours on one calendar day that trigger Over-Billing |
-| `REC_MAX` | `60` — seconds of dictation per entry |
+| `REC_MAX` | `120` — the voice window, shared by entry capture and voice editing |
 | `ATTORNEYS` | The 11-name attorney roster, alphabetical. Seeded so dictation can match a name on the first entry, before any history exists |
 | `CATEGORIES` | Discovery Download, File Review, Extraction Analysis, Phone Call / Conference, Report Writing, Court Testimony, Travel, Other |
 | `MODES` | `['Out-of-Court','In-Court']` |
@@ -180,10 +180,22 @@ costs one tap and a miss costs a split voucher, the threshold deliberately errs 
 offering; near-miss surnames (Anderson/Henderson) will be suggested, which is intended.
 
 ### Voice editing (`parseEditCommand`, `applyHeardEdit`, `commitHeardEdit`)
+Both recorders run `continuous = true` on a single wall-clock deadline of `REC_MAX`, so a
+pause mid-sentence does not end the session — Android ends one at every pause and `onend`
+restarts it. `finishEditVoice()` ends and applies; `abortEditVoice()` ends and discards, and
+is what leaving the row calls. Both clear `onend` before `stop()` or the teardown restarts
+the session.
+
 Editing by voice is a **diff, not a re-parse**. `parseEditCommand` scans an utterance for
 field triggers (`EDIT_FIELDS`), takes the text between one trigger and the next as that
 field's value, and returns only the fields actually named — so "change the hours to three"
 cannot disturb the case, attorney or date.
+
+A two-minute window means commands get **chained**, which the slicer has to handle:
+the words joining two clauses belong to the *following* one (`stripTrailingConnective`), or
+"the attorney to Toni Messina and mark it as in court" reads the attorney as
+"Toni Messina And Mark It As". Some phrasings also put the value *before* the field word
+("make it two and a half hours"), so a failed forward slice retries backwards.
 
 `applyHeardEdit` renders a before → after preview and stops. `commitHeardEdit` writes into
 the **edit-row inputs only**; Save stays a separate deliberate press. Voice never writes to a
