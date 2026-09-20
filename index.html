@@ -156,6 +156,13 @@
             background: var(--rglo);
         }
 
+        .btn:disabled,
+        .btn:disabled:hover {
+            opacity: .45;
+            cursor: not-allowed;
+            background: var(--surf);
+        }
+
         .btn-sm {
             padding: 5px 8px;
             font-size: 12px;
@@ -767,6 +774,8 @@
                 <button class="btn" onclick="exportJSON()" title="Download a full JSON backup">&#8681; Backup</button>
                 <button class="btn" onclick="importJSON()" title="Restore entries from a JSON backup">&#8679;
                     Restore</button>
+                <button class="btn btn-danger" onclick="openErase()"
+                    title="Delete every entry and case, on this device and in the cloud">&#9003; Erase all</button>
             </div>
         </header>
 
@@ -890,6 +899,44 @@
         <section id="view-vouchers" class="hidden">
             <div id="vouchers-body"></div>
         </section>
+    </div>
+
+    <!-- ══ ERASE-ALL MODAL ══ -->
+    <div id="erase-overlay" class="overlay hidden" onclick="if(event.target===this)closeErase()">
+        <div class="modal" style="max-width:560px">
+            <h2>Erase all data</h2>
+            <p style="font-size:13px;color:var(--dim);line-height:1.65;margin-top:4px">
+                This deletes every time entry and case from this browser <strong>and from the cloud</strong>, so it
+                disappears from every device you use Alfred on. It cannot be undone.
+            </p>
+
+            <div id="erase-summary" class="banner banner-red" style="margin-top:16px"></div>
+
+            <div class="affirm-block">
+                <div style="font-weight:700;font-size:14px">Take a backup first</div>
+                <div style="font-size:12.5px;color:var(--dim);margin:3px 0 11px">
+                    Billable time is hard to reconstruct. Download a copy before erasing — the JSON backup can be
+                    restored later with the Restore button.
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    <button class="btn" onclick="exportJSON()">&#8681; Download JSON backup</button>
+                    <button class="btn" onclick="exportCSV()">&#8681; Export CSV</button>
+                </div>
+            </div>
+
+            <div class="field" style="margin-top:18px">
+                <label for="erase-confirm">Type ERASE to confirm</label>
+                <input id="erase-confirm" class="inp" placeholder="ERASE" autocomplete="off" spellcheck="false"
+                    oninput="onEraseInput()" />
+            </div>
+
+            <div id="erase-status" class="banner hidden" style="margin:16px 0 0"></div>
+
+            <div class="modal-acts">
+                <button class="btn" onclick="closeErase()">Cancel</button>
+                <button class="btn btn-danger" id="erase-go" disabled onclick="doErase()">Erase everything</button>
+            </div>
+        </div>
     </div>
 
     <!-- ══ AFFIRMATION MODAL ══ -->
@@ -2092,6 +2139,104 @@
             inp.click();
         }
 
+        // ═══════════════ ERASE ALL ═══════════════
+        // A full reset has to clear the cloud as well as this browser. Clearing only
+        // localStorage would look like it worked, then loadFromCloud() would put
+        // everything back on the next refresh.
+        function openErase() {
+            const hours = round2(entries.reduce((n, e) => n + e.hours, 0));
+            const amount = entries.reduce((n, e) => n + e.hours * e.rate, 0);
+            const nCases = caseNames().length;
+            const sum = document.getElementById('erase-summary');
+
+            if (!entries.length && !nCases) {
+                sum.className = 'banner banner-info';
+                sum.innerHTML = '<div class="ico">\u2139</div><div class="body">' +
+                    'There is nothing logged to erase. Running this anyway just clears the saved settings on this device.</div>';
+            } else {
+                sum.className = 'banner banner-red';
+                sum.innerHTML = '<div class="ico">\u26A0</div><div class="body"><strong>About to delete</strong>' +
+                    entries.length + ' ' + (entries.length === 1 ? 'entry' : 'entries') + ' across ' +
+                    nCases + ' ' + (nCases === 1 ? 'case' : 'cases') + ' \u2014 ' +
+                    hours.toFixed(2) + ' billable hours worth ' + money(amount) + '.</div>';
+            }
+
+            document.getElementById('erase-confirm').value = '';
+            const go = document.getElementById('erase-go');
+            go.disabled = true; go.textContent = 'Erase everything';
+            document.getElementById('erase-status').classList.add('hidden');
+            document.getElementById('erase-overlay').classList.remove('hidden');
+            document.getElementById('erase-confirm').focus();
+        }
+
+        function closeErase() {
+            document.getElementById('erase-overlay').classList.add('hidden');
+        }
+
+        function onEraseInput() {
+            document.getElementById('erase-go').disabled =
+                document.getElementById('erase-confirm').value.trim().toUpperCase() !== 'ERASE';
+        }
+
+        async function doErase() {
+            const go = document.getElementById('erase-go');
+            const status = document.getElementById('erase-status');
+            go.disabled = true; go.textContent = 'Erasing\u2026';
+            status.classList.remove('hidden');
+            status.className = 'banner banner-info';
+            status.innerHTML = '<div class="ico">\u23F3</div><div class="body">Clearing this device and the cloud\u2026</div>';
+
+            // Kill any debounced sync first, or it could re-upload what we just deleted.
+            clearTimeout(syncTimer);
+            syncTimer = null;
+
+            let cloudError = null;
+            if (sb) {
+                try {
+                    const a = await sb.from(ENTRIES_TABLE).delete().neq('id', '');
+                    if (a.error) throw a.error;
+                    const b = await sb.from(CASES_TABLE).delete().neq('name', '');
+                    if (b.error) throw b.error;
+                } catch (err) {
+                    cloudError = (err && err.message) ? err.message : String(err);
+                }
+            }
+
+            entries = [];
+            caseBook = [];
+            editingId = null;
+            filters = { caseName: '', attorney: '', from: '', to: '', conflictsOnly: false };
+            try {
+                localStorage.removeItem('alfred-entries');
+                localStorage.removeItem('alfred-cases');
+                // A deliberate wipe should leave the app empty, not hand back the samples.
+                localStorage.setItem('alfred-seeded', '1');
+                localStorage.setItem('alfred-demo', '0');
+            } catch (_) { /* private mode \u2014 in-memory reset still stands */ }
+
+            if (draft) discardDraft();
+            renderAll();
+            switchTab('log');
+
+            if (cloudError) {
+                // Local is clear but the cloud is not, so the next refresh would restore
+                // everything. Say so plainly instead of reporting a clean wipe.
+                status.className = 'banner banner-red';
+                status.innerHTML = '<div class="ico">\u26A0</div><div class="body"><strong>This device is cleared, the cloud is not</strong>' +
+                    'Supabase returned: ' + esc(cloudError) + '. Your data will come back on the next refresh. ' +
+                    'Check the connection and run Erase all again.</div>';
+                go.disabled = false; go.textContent = 'Retry erase';
+                return;
+            }
+
+            status.className = 'banner banner-info';
+            status.innerHTML = '<div class="ico">\u2713</div><div class="body"><strong>Everything erased</strong>' +
+                (sb ? 'This device and the cloud are both clear.' : 'This device is clear. Cloud sync was not connected.') +
+                '</div>';
+            go.textContent = 'Erased';
+            setTimeout(() => { closeErase(); flashHeader('All data erased \u2014 starting fresh'); }, 1400);
+        }
+
         // ═══════════════ DEMO DATA ═══════════════
         function demoData() {
             const mk = (n, d, s, e, c, a, cat, mode, desc) => ({
@@ -2165,7 +2310,7 @@
         }
 
         document.addEventListener('keydown', e => {
-            if (e.key === 'Escape') { closeAffirm(); if (editingId) cancelEdit(); }
+            if (e.key === 'Escape') { closeAffirm(); closeErase(); if (editingId) cancelEdit(); }
         });
 
         initApp();

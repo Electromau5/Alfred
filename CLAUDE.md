@@ -148,6 +148,17 @@ editable rate and cap, affirmation badges, and a per-case CSV export.
   quoting, TOTAL row appended.
 - `exportJSON()` / `importJSON()` — full backup and merge-by-id restore.
 
+### Erase all (`openErase`, `doErase`)
+Header button → modal gated on typing `ERASE`. **Deletes the Supabase rows before clearing
+localStorage**, because clearing only local state would look like it worked and then
+`loadFromCloud()` would restore everything on the next refresh. It also cancels the pending
+debounced `syncTimer` first, so a queued sync cannot re-upload what is being deleted.
+
+If the cloud delete fails, the modal says so in red, names the Supabase error, warns that the
+data returns on refresh, and offers a retry — it never reports a clean wipe it did not achieve.
+On success it sets `alfred-seeded='1'` so a deliberate wipe leaves the app genuinely empty
+rather than handing back the demo cases.
+
 ### Demo data (`demoData`, `maybeSeed`, `clearDemo`)
 Seeds Douglas Zimbler (Gloria Keum, Esq.) and Joaquin Diaz (Chief Vasquez Investigations) on a
 genuinely empty first run only, guarded by the `alfred-seeded` localStorage flag. Demo ids are
@@ -163,5 +174,7 @@ Zimbler always demonstrates all three affirmation triggers.
 - **Cloud sync is fire-and-forget** — errors are logged to console but never surfaced.
 - **Speech API is Chrome/Edge only** — other browsers fall back to the text box, and the
   recorder label says so.
+- **Anything that clears data must clear both tiers** — localStorage *and* Supabase — or it
+  silently comes back from the cloud on the next load. See `doErase()`.
 - **`hours` is always derived** from start/end — never set it independently, or CSV totals and
   cap meters drift apart.
