@@ -1356,14 +1356,18 @@
             if (!sb) return;
             setSyncState('syncing');
             try {
-                const rows = entries.map(entryToRow);
+                // Sample rows stay on the device that generated them. A fresh device seeds
+                // them before it has ever seen the cloud, and uploading them would push
+                // fake billing into the real shared dataset.
+                const real = entries.filter(e => !String(e.id).startsWith('demo-'));
+                const rows = real.map(entryToRow);
                 if (rows.length) {
                     const up = await sb.from(ENTRIES_TABLE).upsert(rows, { onConflict: 'id' });
                     if (up.error) throw up.error;
                 }
                 let del = sb.from(ENTRIES_TABLE).delete();
-                del = entries.length
-                    ? del.not('id', 'in', '(' + entries.map(e => '"' + e.id + '"').join(',') + ')')
+                del = real.length
+                    ? del.not('id', 'in', '(' + real.map(e => '"' + e.id + '"').join(',') + ')')
                     : del.neq('id', '');
                 const dr = await del;
                 if (dr.error) throw dr.error;
@@ -1391,12 +1395,19 @@
                 if (er.error) throw er.error;
                 {
                     const cloud = (er.data || []).map(rowToEntry);
-                    if (cloud.length === 0 && entries.length > 0) {
+                    const realLocal = entries.filter(e => !String(e.id).startsWith('demo-'));
+                    if (cloud.length === 0 && realLocal.length > 0) {
                         await syncToCloud();
                     } else {
+                        // Real entries arriving from the cloud retire the samples, so a
+                        // device that was showing demo data does not end up with both.
+                        const base = cloud.length ? realLocal : entries;
                         const ids = new Set(cloud.map(e => e.id));
-                        const localOnly = entries.filter(e => !ids.has(e.id));
+                        const localOnly = base.filter(e => !ids.has(e.id));
                         entries = [...localOnly, ...cloud];
+                        if (cloud.length) {
+                            try { localStorage.setItem('alfred-demo', '0'); } catch (_) { }
+                        }
                         if (localOnly.length) scheduleSync();
                     }
                 }

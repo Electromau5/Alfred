@@ -241,6 +241,12 @@ On success it sets `alfred-seeded='1'` so a deliberate wipe leaves the app genui
 rather than handing back the demo cases.
 
 ### Demo data (`demoData`, `maybeSeed`, `clearDemo`)
+**Demo rows never leave the device.** `syncToCloud` filters out any id prefixed `demo-`,
+because a fresh device seeds samples before it has ever seen the cloud — without this, opening
+Alfred on a new laptop would upload fake billing into the real shared dataset. Conversely,
+when `loadFromCloud` returns real entries, local demo rows are dropped so a device never shows
+both.
+
 Seeds Douglas Zimbler (Gloria Keum, Esq.) and Joaquin Diaz (Chief Vasquez Investigations) on a
 genuinely empty first run only, guarded by the `alfred-seeded` localStorage flag. Demo ids are
 prefixed `demo-`; a dismissible banner offers `clearDemo()`. Dates are relative to today, so
