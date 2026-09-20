@@ -1011,6 +1011,10 @@
         let recState = 'idle';
         let timeLeft = REC_MAX;
         let rRec = null, rTimer = null, isRecRef = false, finalText = '';
+        // Transcript is kept in two parts: text committed by recognition sessions that
+        // have already ended, and text from the session currently running. Android ends
+        // and restarts sessions constantly, so a single buffer loses text on every restart.
+        let committedText = '', sessionText = '', recDeadline = 0;
 
         // ═══════════════ SMALL HELPERS ═══════════════
         function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
@@ -1510,6 +1514,33 @@
             divider.textContent = 'log an entry';
         }
 
+        // ═════════ TRANSCRIPT ASSEMBLY ═════════
+        function joinText(a, b) {
+            a = (a || '').trim(); b = (b || '').trim();
+            return a && b ? a + ' ' + b : (a || b);
+        }
+
+        // Desktop Chrome reports each utterance once. Android Chrome instead re-reports a
+        // progressively longer prefix of the SAME utterance, every copy flagged isFinal:
+        //   "begins" / "begins on" / "begins on the" / "begins on the 18th"
+        // Concatenating those verbatim is what produced
+        //   "begins begins on begins on the begins on the 18th"
+        // So a part that merely extends what we already have replaces it instead of
+        // being appended, and a part already contained in the tail is dropped.
+        function collapseParts(parts) {
+            let out = '';
+            for (const raw of parts) {
+                const t = (raw || '').trim();
+                if (!t) continue;
+                if (!out) { out = t; continue; }
+                const a = out.toLowerCase(), b = t.toLowerCase();
+                if (b.startsWith(a)) out = t;            // extends everything so far
+                else if (a.endsWith(b) || a.includes(b)) continue;  // already have it
+                else out = out + ' ' + t;                // genuinely new speech
+            }
+            return out;
+        }
+
         // ═══════════════ VOICE RECORDING ═══════════════
         function toggleRec() {
             if (recState === 'rec') doStop();
@@ -1520,7 +1551,7 @@
             const sup = speechSupport();
             if (!sup.ok) { showError(sup.title + ' — ' + sup.message); return; }
             setRecState('starting');
-            finalText = '';
+            finalText = ''; committedText = ''; sessionText = '';
             document.getElementById('live-box').classList.add('hidden');
             document.getElementById('live-text').textContent = '';
             document.getElementById('rec-error').classList.add('hidden');
@@ -1528,29 +1559,33 @@
             const r = new SR();
             r.continuous = true; r.interimResults = true; r.lang = 'en-US';
 
-            r.onstart = () => {
-                setRecState('rec');
-                timeLeft = REC_MAX;
-                rTimer = setInterval(() => {
-                    timeLeft--;
-                    document.getElementById('timer-display').textContent = timeLeft + 's';
-                    document.getElementById('ring-progress').style.strokeDashoffset = CIRC - (timeLeft / REC_MAX) * CIRC;
-                    if (timeLeft <= 0) doStop();
-                }, 1000);
-            };
+            // Android restarts the recognition session on every pause, firing onstart
+            // again each time. Starting the countdown here would reset it to 60s and leak
+            // another interval per restart, which is why the timer ran backwards and
+            // counted down several seconds per second.
+            r.onstart = () => { if (recState !== 'rec') setRecState('rec'); };
 
             r.onresult = e => {
-                let f = '', i = '';
+                const finals = [], interims = [];
                 for (let j = 0; j < e.results.length; j++) {
-                    if (e.results[j].isFinal) f += e.results[j][0].transcript + ' ';
-                    else i += e.results[j][0].transcript;
+                    (e.results[j].isFinal ? finals : interims).push(e.results[j][0].transcript);
                 }
-                finalText = f;
+                sessionText = collapseParts(finals);
+                finalText = joinText(committedText, sessionText);
                 document.getElementById('live-box').classList.remove('hidden');
-                document.getElementById('live-text').textContent = f + i;
+                document.getElementById('live-text').textContent = joinText(finalText, collapseParts(interims));
             };
 
-            r.onend = () => { if (isRecRef) { try { r.start(); } catch (_) { } } };
+            r.onend = () => {
+                // Commit this session before restarting, or the next session's results
+                // overwrite everything said so far.
+                committedText = joinText(committedText, sessionText);
+                sessionText = '';
+                finalText = committedText;
+                if (!isRecRef) return;
+                if (Date.now() >= recDeadline) { doStop(); return; }
+                try { r.start(); } catch (_) { /* already restarting */ }
+            };
 
             r.onerror = e => {
                 isRecRef = false;
@@ -1565,6 +1600,18 @@
             };
 
             rRec = r; isRecRef = true;
+
+            // One clock for the whole recording, driven by wall time so that restarts
+            // and overlapping ticks cannot corrupt it.
+            clearInterval(rTimer);
+            recDeadline = Date.now() + REC_MAX * 1000;
+            rTimer = setInterval(() => {
+                const left = Math.max(0, Math.ceil((recDeadline - Date.now()) / 1000));
+                document.getElementById('timer-display').textContent = left + 's';
+                document.getElementById('ring-progress').style.strokeDashoffset = CIRC - (left / REC_MAX) * CIRC;
+                if (left <= 0) doStop();
+            }, 250);
+
             try { r.start(); } catch (err) {
                 isRecRef = false; setRecState('idle');
                 showError('Could not start recording. Check microphone permissions in your browser.');
@@ -1575,7 +1622,8 @@
             isRecRef = false;
             clearInterval(rTimer);
             if (rRec) { try { rRec.onend = null; rRec.stop(); } catch (_) { } rRec = null; }
-            const content = finalText.trim();
+            const content = joinText(committedText, sessionText).trim();
+            committedText = ''; sessionText = ''; finalText = '';
             setRecState('idle');
             if (!content) {
                 showError('Nothing was transcribed. Make sure your microphone is working and speak clearly.');
